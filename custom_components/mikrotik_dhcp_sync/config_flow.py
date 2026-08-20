@@ -25,73 +25,45 @@ from .const import (
 from .routeros import RouterOSClient, looks_like_auth_error
 
 
-def _scan_interval_validator(value: Any) -> int:
-    """Validate and normalize the scan interval in seconds."""
+def _scan_interval_schema() -> vol.All:
+    """Return a frontend-serializable scan interval validator."""
     return vol.All(
         vol.Coerce(int),
         vol.Range(min=MIN_SCAN_INTERVAL_SECONDS, max=MAX_SCAN_INTERVAL_SECONDS),
-    )(value)
+    )
 
 
-def _user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+def _setup_schema() -> vol.Schema:
     """Return the setup schema."""
-    defaults = defaults or {}
-    host_field = (
-        vol.Required(CONF_HOST, default=defaults[CONF_HOST])
-        if CONF_HOST in defaults
-        else vol.Required(CONF_HOST)
-    )
-    username_field = (
-        vol.Required(CONF_USERNAME, default=defaults[CONF_USERNAME])
-        if CONF_USERNAME in defaults
-        else vol.Required(CONF_USERNAME)
-    )
-    password_field = (
-        vol.Required(CONF_PASSWORD, default=defaults[CONF_PASSWORD])
-        if CONF_PASSWORD in defaults
-        else vol.Required(CONF_PASSWORD)
-    )
     return vol.Schema(
         {
-            host_field: str,
-            username_field: str,
-            password_field: str,
-            vol.Optional(
-                CONF_PORT,
-                default=defaults.get(CONF_PORT, DEFAULT_PORT),
-            ): int,
+            vol.Required(CONF_HOST): str,
+            vol.Required(CONF_USERNAME): str,
+            vol.Required(CONF_PASSWORD): str,
+            vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
             vol.Optional(
                 CONF_SCAN_INTERVAL,
-                default=defaults.get(
-                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS
-                ),
-            ): _scan_interval_validator,
+                default=DEFAULT_SCAN_INTERVAL_SECONDS,
+            ): _scan_interval_schema(),
             vol.Optional(
                 CONF_SKIP_EMPTY_HOSTNAMES,
-                default=defaults.get(
-                    CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES
-                ),
+                default=DEFAULT_SKIP_EMPTY_HOSTNAMES,
             ): bool,
         }
     )
 
 
-def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+def _options_schema() -> vol.Schema:
     """Return the options schema."""
-    defaults = defaults or {}
     return vol.Schema(
         {
             vol.Optional(
                 CONF_SCAN_INTERVAL,
-                default=defaults.get(
-                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS
-                ),
-            ): _scan_interval_validator,
+                default=DEFAULT_SCAN_INTERVAL_SECONDS,
+            ): _scan_interval_schema(),
             vol.Optional(
                 CONF_SKIP_EMPTY_HOSTNAMES,
-                default=defaults.get(
-                    CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES
-                ),
+                default=DEFAULT_SKIP_EMPTY_HOSTNAMES,
             ): bool,
         }
     )
@@ -101,7 +73,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for MikroTik DHCP Sync."""
 
     VERSION = 1
-    MINOR_VERSION = 1
 
     @staticmethod
     @callback
@@ -137,7 +108,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_user_schema(),
+            data_schema=_setup_schema(),
             errors=errors,
         )
 
