@@ -72,6 +72,61 @@ The RouterOS API port is configurable and defaults to `8728`.
 This integration depends on `librouteros==4.1.1`, matching the dependency used
 by Home Assistant's official MikroTik integration.
 
+## MikroTik RouterOS Setup
+
+This integration uses the plain RouterOS API service named `api`, not REST and
+not `api-ssl`.
+
+Enable the RouterOS API service:
+
+```routeros
+/ip service enable api
+```
+
+The default API port is `8728`. To keep the default explicit:
+
+```routeros
+/ip service set api port=8728
+```
+
+For better safety, restrict the API service to your Home Assistant host or
+subnet. Replace `192.168.1.10/32` with your Home Assistant IP address:
+
+```routeros
+/ip service set api address=192.168.1.10/32
+```
+
+Create a dedicated read-only API group and user:
+
+```routeros
+/user group add name=homeassistant-dhcp-sync policy=read,api
+/user add name=homeassistant-dhcp-sync group=homeassistant-dhcp-sync password=CHANGE_ME
+```
+
+If your RouterOS version prompts for the password interactively when adding the
+user, you can omit `password=CHANGE_ME` from the `add` command and enter it at
+the prompt instead.
+
+This integration only needs:
+
+- `api`: allows login through the native RouterOS API service
+- `read`: allows reading `/ip/dhcp-server/lease/getall`
+
+It does not need:
+
+- `write`
+- `policy`
+- `test`
+- `sensitive`
+- `reboot`
+- `rest-api`
+- `winbox`
+- SSL certificate setup for `api-ssl`
+
+Home Assistant's official MikroTik integration documents `test` permission
+because it can do device-tracker presence checks such as ping/ARP ping. This
+integration does not do those checks, so `test` is not required.
+
 ## HACS Installation
 
 1. Open HACS in Home Assistant.
