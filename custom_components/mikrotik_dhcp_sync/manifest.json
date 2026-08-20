@@ -1,0 +1,13 @@
+{
+  "domain": "mikrotik_dhcp_sync",
+  "name": "MikroTik DHCP Sync",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["dhcp"],
+  "documentation": "https://github.com/hmsta/ha-mikrotik-dhcp-sync",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "loggers": ["librouteros"],
+  "requirements": ["librouteros==4.1.1"],
+  "version": "0.1.0"
+}
