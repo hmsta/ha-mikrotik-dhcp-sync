@@ -35,10 +35,12 @@ def async_import_leases_to_dhcp_cache(
     leases: list[dict[str, Any]],
     *,
     skip_empty_hostnames: bool = False,
+    authoritative_sync: bool = False,
 ) -> dict[str, dict[str, str]]:
-    """Insert or update active MikroTik leases in HA's DHCP address cache."""
+    """Sync active MikroTik leases into HA's DHCP address cache."""
     address_data = async_get_address_data_internal(hass)
     changed: dict[str, dict[str, str]] = {}
+    desired: dict[str, dict[str, str]] = {}
 
     for lease in leases:
         if not lease.get(LEASE_ACTIVE_ADDRESS):
@@ -55,6 +57,16 @@ def async_import_leases_to_dhcp_cache(
             continue
 
         mac_key, compressed_ip = normalized
+        desired[mac_key] = {IP_ADDRESS: compressed_ip, HOSTNAME: hostname}
+
+    if authoritative_sync:
+        for mac_key in tuple(address_data):
+            if mac_key not in desired:
+                del address_data[mac_key]
+
+    for mac_key, desired_data in desired.items():
+        compressed_ip = desired_data[IP_ADDRESS]
+        hostname = desired_data[HOSTNAME]
         current_data = address_data.get(mac_key)
         if (
             current_data
@@ -63,11 +75,10 @@ def async_import_leases_to_dhcp_cache(
         ):
             continue
 
-        data = {IP_ADDRESS: compressed_ip, HOSTNAME: hostname}
-        address_data[mac_key] = data
-        changed[mac_key] = data
+        address_data[mac_key] = desired_data
+        changed[mac_key] = desired_data
 
-    if changed:
+    if changed or authoritative_sync:
         _async_notify_dhcp_subscribers(hass, changed)
 
     return changed

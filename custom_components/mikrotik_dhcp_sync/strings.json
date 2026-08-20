@@ -8,7 +8,8 @@
           "password": "Password",
           "port": "Port",
           "scan_interval": "Sync interval in seconds",
-          "skip_empty_hostnames": "Skip leases without hostnames"
+          "skip_empty_hostnames": "Skip leases without hostnames",
+          "authoritative_sync": "Delete DHCP cache entries missing from MikroTik"
         }
       }
     },
@@ -22,7 +23,8 @@
       "init": {
         "data": {
           "scan_interval": "Sync interval in seconds",
-          "skip_empty_hostnames": "Skip leases without hostnames"
+          "skip_empty_hostnames": "Skip leases without hostnames",
+          "authoritative_sync": "Delete DHCP cache entries missing from MikroTik"
         }
       }
     }

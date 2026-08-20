@@ -279,6 +279,45 @@ def test_other_dhcp_records_are_never_cleared(dhcp_bridge, hass):
     }
 
 
+def test_authoritative_sync_clears_records_missing_from_mikrotik(dhcp_bridge, hass):
+    hass.data["dhcp"].address_data["001122334455"] = {
+        "ip": "192.168.1.50",
+        "hostname": "other",
+    }
+
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass,
+        [
+            {
+                "active-address": "192.168.1.10",
+                "address": "192.168.1.10",
+                "host-name": "phone",
+                "mac-address": "AA:BB:CC:DD:EE:FF",
+            }
+        ],
+        authoritative_sync=True,
+    )
+
+    assert hass.data["dhcp"].address_data == {
+        "aabbccddeeff": {"ip": "192.168.1.10", "hostname": "phone"}
+    }
+
+
+def test_authoritative_sync_empty_mikrotik_result_clears_cache(dhcp_bridge, hass):
+    hass.data["dhcp"].address_data["001122334455"] = {
+        "ip": "192.168.1.50",
+        "hostname": "other",
+    }
+
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass,
+        [],
+        authoritative_sync=True,
+    )
+
+    assert hass.data["dhcp"].address_data == {}
+
+
 def test_empty_hostname_can_be_skipped(dhcp_bridge, hass):
     import_leases(
         dhcp_bridge,

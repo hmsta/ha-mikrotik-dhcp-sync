@@ -12,12 +12,14 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    CONF_AUTHORITATIVE_SYNC,
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
     CONF_SKIP_EMPTY_HOSTNAMES,
     CONF_USERNAME,
+    DEFAULT_AUTHORITATIVE_SYNC,
     DEFAULT_SCAN_INTERVAL_SECONDS,
     DEFAULT_SKIP_EMPTY_HOSTNAMES,
     DOMAIN,
@@ -50,6 +52,10 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
         self._skip_empty_hostnames = entry.options.get(
             CONF_SKIP_EMPTY_HOSTNAMES,
             entry.data.get(CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES),
+        )
+        self._authoritative_sync = entry.options.get(
+            CONF_AUTHORITATIVE_SYNC,
+            entry.data.get(CONF_AUTHORITATIVE_SYNC, DEFAULT_AUTHORITATIVE_SYNC),
         )
 
     @staticmethod
@@ -101,6 +107,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
             self.hass,
             leases,
             skip_empty_hostnames=self._skip_empty_hostnames,
+            authoritative_sync=self._authoritative_sync,
         )
 
     async def async_close(self) -> None:

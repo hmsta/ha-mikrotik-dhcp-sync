@@ -179,6 +179,7 @@ The config flow asks for:
 - `port`
 - `sync interval in seconds`
 - `skip leases without hostnames`
+- `delete DHCP cache entries missing from MikroTik`
 
 The default port is `8728`.
 
@@ -190,11 +191,17 @@ leases that do not have `host-name` set are ignored instead of being inserted
 with an empty hostname. Disable it if you want active leases without hostnames
 to appear in Home Assistant's DHCP cache.
 
+`Delete DHCP cache entries missing from MikroTik` is enabled by default. When
+enabled, each poll treats active MikroTik DHCP leases as authoritative and
+removes HA DHCP cache entries whose MAC address is not present in the validated
+MikroTik result.
+
 This integration connects directly to RouterOS and does not depend on Home
 Assistant's official `mikrotik` integration.
 
-After installation, the sync interval and hostname-skip behavior can be changed
-from the integration's `Configure` flow in Home Assistant.
+After installation, the sync interval, hostname-skip behavior, and authoritative
+delete behavior can be changed from the integration's `Configure` flow in Home
+Assistant.
 
 ## Lease Import Rules
 
@@ -241,13 +248,13 @@ Malformed MAC addresses and invalid or unsupported IP addresses are skipped.
 
 ## Cache Behavior
 
-The integration only inserts or updates individual MAC records. It never clears
-or replaces Home Assistant's full DHCP cache.
+By default, the integration treats active MikroTik DHCP leases as authoritative.
+After each successful RouterOS poll, Home Assistant's DHCP cache is updated so
+that MAC addresses missing from the validated MikroTik result are removed.
 
-If a MikroTik lease disappears, the corresponding Home Assistant DHCP cache
-entry is left alone. This matches the discovery-cache nature of Home Assistant's
-DHCP data and avoids deleting records that may have come from other discovery
-sources.
+Disable `Delete DHCP cache entries missing from MikroTik` if you want the older
+additive behavior where MikroTik leases only insert/update HA DHCP cache records
+and never delete existing records.
 
 Existing hostnames are preserved using Home Assistant's current DHCP update
 rule. For example, a new empty hostname will not overwrite an existing useful
