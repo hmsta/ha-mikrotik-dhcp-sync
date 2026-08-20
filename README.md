@@ -132,7 +132,12 @@ integration does not do those checks, so `test` is not required.
 1. Open HACS in Home Assistant.
 2. Go to `Integrations`.
 3. Open the menu and choose `Custom repositories`.
-4. Add this repository URL.
+4. Add this repository URL:
+
+   ```text
+   https://github.com/hmsta/ha-mikrotik-dhcp-sync
+   ```
+
 5. Select category `Integration`.
 6. Install `MikroTik DHCP Sync`.
 7. Restart Home Assistant.
