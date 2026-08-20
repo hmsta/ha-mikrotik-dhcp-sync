@@ -279,6 +279,39 @@ def test_other_dhcp_records_are_never_cleared(dhcp_bridge, hass):
     }
 
 
+def test_empty_hostname_can_be_skipped(dhcp_bridge, hass):
+    import_leases(
+        dhcp_bridge,
+        hass,
+        [
+            {
+                "active-address": "192.168.1.10",
+                "address": "192.168.1.10",
+                "mac-address": "AA:BB:CC:DD:EE:FF",
+            }
+        ],
+    )
+
+    assert hass.data["dhcp"].address_data == {
+        "aabbccddeeff": {"ip": "192.168.1.10", "hostname": ""}
+    }
+
+    hass.data["dhcp"].address_data.clear()
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass,
+        [
+            {
+                "active-address": "192.168.1.10",
+                "address": "192.168.1.10",
+                "mac-address": "AA:BB:CC:DD:EE:FF",
+            }
+        ],
+        skip_empty_hostnames=True,
+    )
+
+    assert hass.data["dhcp"].address_data == {}
+
+
 def test_changed_record_is_sent_to_dhcp_subscribers(dhcp_bridge, hass):
     seen = []
     hass.data["dhcp"].callbacks.add(seen.append)

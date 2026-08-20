@@ -31,7 +31,10 @@ _MAC_RE = re.compile(r"[0-9a-f]{2}(:[0-9a-f]{2}){5}")
 
 @callback
 def async_import_leases_to_dhcp_cache(
-    hass: HomeAssistant, leases: list[dict[str, Any]]
+    hass: HomeAssistant,
+    leases: list[dict[str, Any]],
+    *,
+    skip_empty_hostnames: bool = False,
 ) -> dict[str, dict[str, str]]:
     """Insert or update active MikroTik leases in HA's DHCP address cache."""
     address_data = async_get_address_data_internal(hass)
@@ -43,6 +46,8 @@ def async_import_leases_to_dhcp_cache(
 
         ip_address = lease.get(LEASE_ADDRESS) or lease.get(LEASE_ACTIVE_ADDRESS)
         hostname = lease.get(LEASE_HOSTNAME) or ""
+        if skip_empty_hostnames and not hostname:
+            continue
         raw_mac = lease.get(LEASE_MAC)
 
         normalized = _normalize_lease(ip_address, raw_mac)

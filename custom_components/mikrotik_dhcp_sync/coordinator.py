@@ -16,8 +16,10 @@ from .const import (
     CONF_PASSWORD,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
+    CONF_SKIP_EMPTY_HOSTNAMES,
     CONF_USERNAME,
     DEFAULT_SCAN_INTERVAL_SECONDS,
+    DEFAULT_SKIP_EMPTY_HOSTNAMES,
     DOMAIN,
 )
 from .dhcp_bridge import async_import_leases_to_dhcp_cache
@@ -45,6 +47,10 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
             entry.data[CONF_PORT],
         )
         self._unsub_poll: CALLBACK_TYPE | None = None
+        self._skip_empty_hostnames = entry.options.get(
+            CONF_SKIP_EMPTY_HOSTNAMES,
+            entry.data.get(CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES),
+        )
 
     @staticmethod
     def _update_interval_from_entry(entry: ConfigEntry) -> timedelta:
@@ -94,6 +100,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
         return async_import_leases_to_dhcp_cache(
             self.hass,
             leases,
+            skip_empty_hostnames=self._skip_empty_hostnames,
         )
 
     async def async_close(self) -> None:

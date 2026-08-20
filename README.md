@@ -178,18 +178,25 @@ The config flow asks for:
 - `password`
 - `port`
 - `sync interval in seconds`
+- `skip leases without hostnames`
 
 The default port is `8728`.
 
 The default sync interval is `30` seconds. The allowed range is `5` to `86400`
 seconds.
 
+`Skip leases without hostnames` is enabled by default. When enabled, MikroTik
+leases that do not have `host-name` set are ignored instead of being inserted
+with an empty hostname. Disable it if you want active leases without hostnames
+to appear in Home Assistant's DHCP cache.
+
 This integration connects directly to RouterOS and does not depend on Home
 Assistant's official `mikrotik` integration.
 
-After installation, the sync interval can be changed from the integration's
-`Configure` flow in Home Assistant. The connection settings and sync interval
-can also be changed from the integration's `Reconfigure` flow.
+After installation, the sync interval and hostname-skip behavior can be changed
+from the integration's `Configure` flow in Home Assistant. The connection
+settings and these options can also be changed from the integration's
+`Reconfigure` flow.
 
 ## Lease Import Rules
 
@@ -215,6 +222,9 @@ host-name
 ```
 
 If `host-name` is missing, the stored hostname is an empty string.
+
+By default, leases with missing or empty `host-name` values are skipped. This
+can be disabled in the integration options.
 
 The MAC address is read from:
 

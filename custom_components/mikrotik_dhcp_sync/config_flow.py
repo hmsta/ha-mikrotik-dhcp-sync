@@ -13,8 +13,10 @@ from .const import (
     CONF_PASSWORD,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
+    CONF_SKIP_EMPTY_HOSTNAMES,
     CONF_USERNAME,
     DEFAULT_SCAN_INTERVAL_SECONDS,
+    DEFAULT_SKIP_EMPTY_HOSTNAMES,
     DEFAULT_PORT,
     DOMAIN,
     MAX_SCAN_INTERVAL_SECONDS,
@@ -64,6 +66,12 @@ def _user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                     CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS
                 ),
             ): _scan_interval_validator,
+            vol.Optional(
+                CONF_SKIP_EMPTY_HOSTNAMES,
+                default=defaults.get(
+                    CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES
+                ),
+            ): bool,
         }
     )
 
@@ -79,6 +87,12 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                     CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS
                 ),
             ): _scan_interval_validator,
+            vol.Optional(
+                CONF_SKIP_EMPTY_HOSTNAMES,
+                default=defaults.get(
+                    CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES
+                ),
+            ): bool,
         }
     )
 
@@ -150,7 +164,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_update_reload_and_abort(
                     entry,
                     data_updates=user_input,
-                    options={CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL]},
+                    options={
+                        CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
+                        CONF_SKIP_EMPTY_HOSTNAMES: user_input[
+                            CONF_SKIP_EMPTY_HOSTNAMES
+                        ],
+                    },
                 )
 
         return self.async_show_form(
