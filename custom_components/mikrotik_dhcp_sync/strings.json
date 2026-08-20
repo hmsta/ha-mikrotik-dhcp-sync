@@ -10,24 +10,11 @@
           "scan_interval": "Sync interval in seconds",
           "skip_empty_hostnames": "Skip leases without hostnames"
         }
-      },
-      "reconfigure": {
-        "data": {
-          "host": "Host",
-          "username": "Username",
-          "password": "Password",
-          "port": "Port",
-          "scan_interval": "Sync interval in seconds",
-          "skip_empty_hostnames": "Skip leases without hostnames"
-        }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_auth": "Invalid authentication"
-    },
-    "abort": {
-      "reconfigure_successful": "Reconfiguration successful"
     }
   },
   "options": {

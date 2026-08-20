@@ -194,9 +194,7 @@ This integration connects directly to RouterOS and does not depend on Home
 Assistant's official `mikrotik` integration.
 
 After installation, the sync interval and hostname-skip behavior can be changed
-from the integration's `Configure` flow in Home Assistant. The connection
-settings and these options can also be changed from the integration's
-`Reconfigure` flow.
+from the integration's `Configure` flow in Home Assistant.
 
 ## Lease Import Rules
 

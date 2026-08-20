@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import librouteros
-
 
 class RouterOSClient:
     """Small synchronous wrapper around librouteros."""
@@ -22,6 +20,8 @@ class RouterOSClient:
         """Connect to RouterOS if not already connected."""
         if self._api is not None:
             return
+        import librouteros
+
         self._api = librouteros.connect(
             host=self._host,
             username=self._username,
