@@ -6,23 +6,96 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
+    CONF_SCAN_INTERVAL,
     CONF_USERNAME,
+    DEFAULT_SCAN_INTERVAL_SECONDS,
     DEFAULT_PORT,
     DOMAIN,
+    MAX_SCAN_INTERVAL_SECONDS,
+    MIN_SCAN_INTERVAL_SECONDS,
 )
 from .routeros import RouterOSClient, looks_like_auth_error
+
+
+def _scan_interval_validator(value: Any) -> int:
+    """Validate and normalize the scan interval in seconds."""
+    return vol.All(
+        vol.Coerce(int),
+        vol.Range(min=MIN_SCAN_INTERVAL_SECONDS, max=MAX_SCAN_INTERVAL_SECONDS),
+    )(value)
+
+
+def _user_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Return the setup/reconfigure schema."""
+    defaults = defaults or {}
+    host_field = (
+        vol.Required(CONF_HOST, default=defaults[CONF_HOST])
+        if CONF_HOST in defaults
+        else vol.Required(CONF_HOST)
+    )
+    username_field = (
+        vol.Required(CONF_USERNAME, default=defaults[CONF_USERNAME])
+        if CONF_USERNAME in defaults
+        else vol.Required(CONF_USERNAME)
+    )
+    password_field = (
+        vol.Required(CONF_PASSWORD, default=defaults[CONF_PASSWORD])
+        if CONF_PASSWORD in defaults
+        else vol.Required(CONF_PASSWORD)
+    )
+    return vol.Schema(
+        {
+            host_field: str,
+            username_field: str,
+            password_field: str,
+            vol.Optional(
+                CONF_PORT,
+                default=defaults.get(CONF_PORT, DEFAULT_PORT),
+            ): int,
+            vol.Optional(
+                CONF_SCAN_INTERVAL,
+                default=defaults.get(
+                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS
+                ),
+            ): _scan_interval_validator,
+        }
+    )
+
+
+def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Return the options schema."""
+    defaults = defaults or {}
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_SCAN_INTERVAL,
+                default=defaults.get(
+                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS
+                ),
+            ): _scan_interval_validator,
+        }
+    )
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for MikroTik DHCP Sync."""
 
     VERSION = 1
+    MINOR_VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -50,15 +123,57 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_HOST): str,
-                    vol.Required(CONF_USERNAME): str,
-                    vol.Required(CONF_PASSWORD): str,
-                    vol.Optional(CONF_PORT, default=DEFAULT_PORT): int,
-                }
-            ),
+            data_schema=_user_schema(),
             errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Handle reconfiguration of the existing config entry."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            await self.async_set_unique_id(
+                f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
+            )
+            self._abort_if_unique_id_mismatch()
+
+            try:
+                await _async_validate_input(self.hass, user_input)
+            except Exception as err:
+                errors["base"] = (
+                    "invalid_auth" if looks_like_auth_error(err) else "cannot_connect"
+                )
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data_updates=user_input,
+                    options={CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL]},
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=_user_schema(dict(entry.data) | dict(entry.options)),
+            errors=errors,
+        )
+
+
+class OptionsFlowHandler(config_entries.OptionsFlowWithReload):
+    """Handle MikroTik DHCP Sync options."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Manage options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+
+        defaults = dict(self.config_entry.data) | dict(self.config_entry.options)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=_options_schema(defaults),
         )
 
 

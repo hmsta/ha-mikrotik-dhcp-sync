@@ -177,11 +177,19 @@ The config flow asks for:
 - `username`
 - `password`
 - `port`
+- `sync interval in seconds`
 
 The default port is `8728`.
 
+The default sync interval is `30` seconds. The allowed range is `5` to `86400`
+seconds.
+
 This integration connects directly to RouterOS and does not depend on Home
 Assistant's official `mikrotik` integration.
+
+After installation, the sync interval can be changed from the integration's
+`Configure` flow in Home Assistant. The connection settings and sync interval
+can also be changed from the integration's `Reconfigure` flow.
 
 ## Lease Import Rules
 

@@ -6,13 +6,32 @@
           "host": "Host",
           "username": "Username",
           "password": "Password",
-          "port": "Port"
+          "port": "Port",
+          "scan_interval": "Sync interval in seconds"
+        }
+      },
+      "reconfigure": {
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password",
+          "port": "Port",
+          "scan_interval": "Sync interval in seconds"
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_auth": "Invalid authentication"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Sync interval in seconds"
+        }
+      }
     }
   }
 }

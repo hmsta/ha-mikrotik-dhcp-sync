@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
@@ -14,9 +15,10 @@ from .const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
+    CONF_SCAN_INTERVAL,
     CONF_USERNAME,
+    DEFAULT_SCAN_INTERVAL_SECONDS,
     DOMAIN,
-    UPDATE_INTERVAL,
 )
 from .dhcp_bridge import async_import_leases_to_dhcp_cache
 from .routeros import RouterOSClient, looks_like_auth_error
@@ -34,7 +36,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
             _LOGGER,
             config_entry=entry,
             name=DOMAIN,
-            update_interval=UPDATE_INTERVAL,
+            update_interval=self._update_interval_from_entry(entry),
         )
         self._client = RouterOSClient(
             entry.data[CONF_HOST],
@@ -43,6 +45,15 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
             entry.data[CONF_PORT],
         )
         self._unsub_poll: CALLBACK_TYPE | None = None
+
+    @staticmethod
+    def _update_interval_from_entry(entry: ConfigEntry) -> timedelta:
+        """Return the configured polling interval."""
+        seconds = entry.options.get(
+            CONF_SCAN_INTERVAL,
+            entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS),
+        )
+        return timedelta(seconds=seconds)
 
     @callback
     def async_start_polling(self) -> None:
@@ -56,7 +67,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
         self._unsub_poll = async_track_time_interval(
             self.hass,
             _async_refresh,
-            UPDATE_INTERVAL,
+            self.update_interval,
             name="MikroTik DHCP Sync polling",
         )
 
@@ -80,7 +91,10 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
                 )
             raise UpdateFailed("Failed to fetch MikroTik DHCP leases") from err
 
-        return async_import_leases_to_dhcp_cache(self.hass, leases)
+        return async_import_leases_to_dhcp_cache(
+            self.hass,
+            leases,
+        )
 
     async def async_close(self) -> None:
         """Close the RouterOS API connection."""
