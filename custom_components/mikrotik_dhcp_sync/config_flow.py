@@ -59,21 +59,28 @@ def _setup_schema() -> vol.Schema:
     )
 
 
-def _options_schema() -> vol.Schema:
+def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     """Return the options schema."""
+    defaults = defaults or {}
     return vol.Schema(
         {
             vol.Optional(
                 CONF_SCAN_INTERVAL,
-                default=DEFAULT_SCAN_INTERVAL_SECONDS,
+                default=defaults.get(
+                    CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS
+                ),
             ): _scan_interval_schema(),
             vol.Optional(
                 CONF_SKIP_EMPTY_HOSTNAMES,
-                default=DEFAULT_SKIP_EMPTY_HOSTNAMES,
+                default=defaults.get(
+                    CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES
+                ),
             ): bool,
             vol.Optional(
                 CONF_AUTHORITATIVE_SYNC,
-                default=DEFAULT_AUTHORITATIVE_SYNC,
+                default=defaults.get(
+                    CONF_AUTHORITATIVE_SYNC, DEFAULT_AUTHORITATIVE_SYNC
+                ),
             ): bool,
         }
     )
@@ -90,7 +97,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""
-        return OptionsFlowHandler()
+        return OptionsFlowHandler(config_entry)
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -126,6 +133,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle MikroTik DHCP Sync options."""
 
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self._config_entry = config_entry
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -135,7 +146,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=_options_schema(),
+            data_schema=_options_schema(
+                dict(self._config_entry.data) | dict(self._config_entry.options)
+            ),
         )
 
 
