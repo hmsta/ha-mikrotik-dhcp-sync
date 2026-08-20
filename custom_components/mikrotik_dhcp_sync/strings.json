@@ -25,6 +25,9 @@
     "error": {
       "cannot_connect": "Failed to connect",
       "invalid_auth": "Invalid authentication"
+    },
+    "abort": {
+      "reconfigure_successful": "Reconfiguration successful"
     }
   },
   "options": {

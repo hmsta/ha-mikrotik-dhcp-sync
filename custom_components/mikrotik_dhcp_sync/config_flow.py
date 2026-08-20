@@ -109,7 +109,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""
-        return OptionsFlowHandler(config_entry)
+        return OptionsFlowHandler()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -145,15 +145,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reconfiguration of the existing config entry."""
-        entry = self._get_reconfigure_entry()
+        entry = _get_reconfigure_entry(self)
+        if entry is None:
+            return self.async_abort(reason="unknown")
+
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            await self.async_set_unique_id(
-                f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
-            )
-            self._abort_if_unique_id_mismatch()
-
             try:
                 await _async_validate_input(self.hass, user_input)
             except Exception as err:
@@ -161,9 +159,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     "invalid_auth" if looks_like_auth_error(err) else "cannot_connect"
                 )
             else:
-                return self.async_update_reload_and_abort(
+                self.hass.config_entries.async_update_entry(
                     entry,
-                    data_updates=user_input,
+                    data=user_input,
                     options={
                         CONF_SCAN_INTERVAL: user_input[CONF_SCAN_INTERVAL],
                         CONF_SKIP_EMPTY_HOSTNAMES: user_input[
@@ -171,6 +169,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         ],
                     },
                 )
+                await self.hass.config_entries.async_reload(entry.entry_id)
+                return self.async_abort(reason="reconfigure_successful")
 
         return self.async_show_form(
             step_id="reconfigure",
@@ -182,10 +182,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class OptionsFlowHandler(config_entries.OptionsFlow):
     """Handle MikroTik DHCP Sync options."""
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self._config_entry = config_entry
-
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
@@ -193,11 +189,30 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
-        defaults = dict(self._config_entry.data) | dict(self._config_entry.options)
+        config_entry = getattr(self, "config_entry", None)
+        defaults = (
+            dict(config_entry.data) | dict(config_entry.options)
+            if config_entry is not None
+            else {}
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=_options_schema(defaults),
         )
+
+
+def _get_reconfigure_entry(
+    flow: ConfigFlow,
+) -> config_entries.ConfigEntry | None:
+    """Return the config entry being reconfigured using older HA-compatible APIs."""
+    helper = getattr(flow, "_get_reconfigure_entry", None)
+    if helper is not None:
+        return helper()
+
+    entry_id = flow.context.get("entry_id")
+    if not entry_id:
+        return None
+    return flow.hass.config_entries.async_get_entry(entry_id)
 
 
 async def _async_validate_input(hass: HomeAssistant, data: dict[str, Any]) -> None:
