@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from datetime import timedelta
 
@@ -14,12 +15,14 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .const import (
     CONF_AUTHORITATIVE_SYNC,
     CONF_HOST,
+    CONF_HOSTNAME_FALLBACK_RULES,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
     CONF_SKIP_EMPTY_HOSTNAMES,
     CONF_USERNAME,
     DEFAULT_AUTHORITATIVE_SYNC,
+    DEFAULT_HOSTNAME_FALLBACK_RULES,
     DEFAULT_SCAN_INTERVAL_SECONDS,
     DEFAULT_SKIP_EMPTY_HOSTNAMES,
     DOMAIN,
@@ -56,6 +59,15 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
         self._authoritative_sync = entry.options.get(
             CONF_AUTHORITATIVE_SYNC,
             entry.data.get(CONF_AUTHORITATIVE_SYNC, DEFAULT_AUTHORITATIVE_SYNC),
+        )
+        fallback_rules_text = entry.options.get(
+            CONF_HOSTNAME_FALLBACK_RULES,
+            entry.data.get(
+                CONF_HOSTNAME_FALLBACK_RULES, DEFAULT_HOSTNAME_FALLBACK_RULES
+            ),
+        )
+        self._hostname_fallback_rules = _parse_hostname_fallback_rules(
+            fallback_rules_text
         )
 
     @staticmethod
@@ -108,6 +120,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
             leases,
             skip_empty_hostnames=self._skip_empty_hostnames,
             authoritative_sync=self._authoritative_sync,
+            hostname_fallback_rules=self._hostname_fallback_rules,
         )
 
     async def async_close(self) -> None:
@@ -116,3 +129,45 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
             self._unsub_poll()
             self._unsub_poll = None
         await self.hass.async_add_executor_job(self._client.close)
+
+
+def _parse_hostname_fallback_rules(rules_text: str) -> dict[str, str]:
+    """Parse MAC-prefix hostname fallback rules."""
+    rules: dict[str, str] = {}
+    for line_no, raw_line in enumerate(rules_text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            _LOGGER.warning("Ignoring hostname fallback rule %s without '='", line_no)
+            continue
+        raw_prefix, raw_hostname = line.split("=", 1)
+        prefix = _normalize_mac_prefix(raw_prefix)
+        hostname = raw_hostname.strip()
+        if prefix is None:
+            _LOGGER.warning(
+                "Ignoring hostname fallback rule %s with invalid MAC prefix",
+                line_no,
+            )
+            continue
+        if not hostname:
+            _LOGGER.warning(
+                "Ignoring hostname fallback rule %s with empty hostname",
+                line_no,
+            )
+            continue
+        rules[prefix] = hostname
+    return dict(sorted(rules.items(), key=lambda item: len(item[0]), reverse=True))
+
+
+def _normalize_mac_prefix(raw_prefix: str) -> str | None:
+    """Normalize a MAC prefix to lowercase colonless hex."""
+    prefix = re.sub(r"[:.\-\s]", "", raw_prefix.strip())
+    if (
+        not prefix
+        or len(prefix) > 12
+        or len(prefix) % 2 != 0
+        or re.fullmatch(r"[0-9a-fA-F]+", prefix) is None
+    ):
+        return None
+    return prefix.lower()

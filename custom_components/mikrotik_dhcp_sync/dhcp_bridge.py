@@ -36,6 +36,7 @@ def async_import_leases_to_dhcp_cache(
     *,
     skip_empty_hostnames: bool = False,
     authoritative_sync: bool = False,
+    hostname_fallback_rules: dict[str, str] | None = None,
 ) -> dict[str, dict[str, str]]:
     """Sync active MikroTik leases into HA's DHCP address cache."""
     address_data = async_get_address_data_internal(hass)
@@ -48,8 +49,6 @@ def async_import_leases_to_dhcp_cache(
 
         ip_address = lease.get(LEASE_ADDRESS) or lease.get(LEASE_ACTIVE_ADDRESS)
         hostname = lease.get(LEASE_HOSTNAME) or ""
-        if skip_empty_hostnames and not hostname:
-            continue
         raw_mac = lease.get(LEASE_MAC)
 
         normalized = _normalize_lease(ip_address, raw_mac)
@@ -57,6 +56,10 @@ def async_import_leases_to_dhcp_cache(
             continue
 
         mac_key, compressed_ip = normalized
+        if not hostname and hostname_fallback_rules:
+            hostname = _fallback_hostname(mac_key, hostname_fallback_rules)
+        if skip_empty_hostnames and not hostname:
+            continue
         desired[mac_key] = {IP_ADDRESS: compressed_ip, HOSTNAME: hostname}
 
     if authoritative_sync:
@@ -82,6 +85,17 @@ def async_import_leases_to_dhcp_cache(
         _async_notify_dhcp_subscribers(hass, changed)
 
     return changed
+
+
+def _fallback_hostname(mac_key: str, rules: dict[str, str]) -> str:
+    """Return fallback hostname for a normalized MAC key."""
+    for prefix, hostname in rules.items():
+        if not mac_key.startswith(prefix):
+            continue
+        if len(prefix) == 12:
+            return hostname
+        return f"{hostname}-{mac_key[-4:]}"
+    return ""
 
 
 def _normalize_lease(ip_address: Any, raw_mac: Any) -> tuple[str, str] | None:

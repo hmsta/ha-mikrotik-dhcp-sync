@@ -351,6 +351,66 @@ def test_empty_hostname_can_be_skipped(dhcp_bridge, hass):
     assert hass.data["dhcp"].address_data == {}
 
 
+def test_hostname_fallback_prefix_appends_last_four(dhcp_bridge, hass):
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass,
+        [
+            {
+                "active-address": "192.168.1.10",
+                "address": "192.168.1.10",
+                "mac-address": "7C:45:D0:12:34:56",
+            }
+        ],
+        skip_empty_hostnames=True,
+        hostname_fallback_rules={"7c45d0": "Aircon"},
+    )
+
+    assert hass.data["dhcp"].address_data == {
+        "7c45d0123456": {"ip": "192.168.1.10", "hostname": "Aircon-3456"}
+    }
+
+
+def test_hostname_fallback_full_mac_omits_suffix(dhcp_bridge, hass):
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass,
+        [
+            {
+                "active-address": "192.168.1.10",
+                "address": "192.168.1.10",
+                "mac-address": "7C:45:D0:12:34:56",
+            }
+        ],
+        skip_empty_hostnames=True,
+        hostname_fallback_rules={"7c45d0123456": "Bedroom-Aircon"},
+    )
+
+    assert hass.data["dhcp"].address_data == {
+        "7c45d0123456": {
+            "ip": "192.168.1.10",
+            "hostname": "Bedroom-Aircon",
+        }
+    }
+
+
+def test_mikrotik_hostname_takes_precedence_over_fallback(dhcp_bridge, hass):
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass,
+        [
+            {
+                "active-address": "192.168.1.10",
+                "address": "192.168.1.10",
+                "host-name": "routeros-name",
+                "mac-address": "7C:45:D0:12:34:56",
+            }
+        ],
+        hostname_fallback_rules={"7c45d0": "Aircon"},
+    )
+
+    assert hass.data["dhcp"].address_data == {
+        "7c45d0123456": {"ip": "192.168.1.10", "hostname": "routeros-name"}
+    }
+
+
 def test_changed_record_is_sent_to_dhcp_subscribers(dhcp_bridge, hass):
     seen = []
     hass.data["dhcp"].callbacks.add(seen.append)

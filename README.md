@@ -180,6 +180,7 @@ The config flow asks for:
 - `sync interval in seconds`
 - `skip leases without hostnames`
 - `delete DHCP cache entries missing from MikroTik`
+- `hostname fallback rules`
 
 The default port is `8728`.
 
@@ -196,12 +197,23 @@ enabled, each poll treats active MikroTik DHCP leases as authoritative and
 removes HA DHCP cache entries whose MAC address is not present in the validated
 MikroTik result.
 
+`Hostname fallback rules` can assign names to devices whose MikroTik lease has
+an empty `host-name`. Use one rule per line:
+
+```text
+7C:45:D0=Aircon
+7C:45:D0:12:34:56=Bedroom-Aircon
+```
+
+Prefix rules append the last four hex characters of the MAC, so
+`7C:45:D0:12:34:56` becomes `Aircon-3456`. Full-MAC rules use the configured
+hostname exactly, so the same MAC would become `Bedroom-Aircon`.
+
 This integration connects directly to RouterOS and does not depend on Home
 Assistant's official `mikrotik` integration.
 
-After installation, the sync interval, hostname-skip behavior, and authoritative
-delete behavior can be changed from the integration's `Configure` flow in Home
-Assistant.
+After installation, these options can be changed from the integration's
+`Configure` flow in Home Assistant.
 
 ## Lease Import Rules
 
@@ -227,6 +239,10 @@ host-name
 ```
 
 If `host-name` is missing, the stored hostname is an empty string.
+
+If hostname fallback rules are configured, they are applied before `Skip leases
+without hostnames`. This means a matching fallback rule can keep an otherwise
+nameless lease from being skipped.
 
 By default, leases with missing or empty `host-name` values are skipped. This
 can be disabled in the integration options.

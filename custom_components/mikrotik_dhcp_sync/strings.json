@@ -9,7 +9,8 @@
           "port": "Port",
           "scan_interval": "Sync interval in seconds",
           "skip_empty_hostnames": "Skip leases without hostnames",
-          "authoritative_sync": "Delete DHCP cache entries missing from MikroTik"
+          "authoritative_sync": "Delete DHCP cache entries missing from MikroTik",
+          "hostname_fallback_rules": "Hostname fallback rules"
         }
       }
     },
@@ -24,7 +25,8 @@
         "data": {
           "scan_interval": "Sync interval in seconds",
           "skip_empty_hostnames": "Skip leases without hostnames",
-          "authoritative_sync": "Delete DHCP cache entries missing from MikroTik"
+          "authoritative_sync": "Delete DHCP cache entries missing from MikroTik",
+          "hostname_fallback_rules": "Hostname fallback rules"
         }
       }
     }

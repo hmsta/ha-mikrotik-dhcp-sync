@@ -11,12 +11,14 @@ from homeassistant.core import HomeAssistant, callback
 from .const import (
     CONF_AUTHORITATIVE_SYNC,
     CONF_HOST,
+    CONF_HOSTNAME_FALLBACK_RULES,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
     CONF_SKIP_EMPTY_HOSTNAMES,
     CONF_USERNAME,
     DEFAULT_AUTHORITATIVE_SYNC,
+    DEFAULT_HOSTNAME_FALLBACK_RULES,
     DEFAULT_SCAN_INTERVAL_SECONDS,
     DEFAULT_SKIP_EMPTY_HOSTNAMES,
     DEFAULT_PORT,
@@ -55,6 +57,10 @@ def _setup_schema() -> vol.Schema:
                 CONF_AUTHORITATIVE_SYNC,
                 default=DEFAULT_AUTHORITATIVE_SYNC,
             ): bool,
+            vol.Optional(
+                CONF_HOSTNAME_FALLBACK_RULES,
+                default=DEFAULT_HOSTNAME_FALLBACK_RULES,
+            ): str,
         }
     )
 
@@ -82,6 +88,12 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                     CONF_AUTHORITATIVE_SYNC, DEFAULT_AUTHORITATIVE_SYNC
                 ),
             ): bool,
+            vol.Optional(
+                CONF_HOSTNAME_FALLBACK_RULES,
+                default=defaults.get(
+                    CONF_HOSTNAME_FALLBACK_RULES, DEFAULT_HOSTNAME_FALLBACK_RULES
+                ),
+            ): str,
         }
     )
 
