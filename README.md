@@ -295,17 +295,168 @@ custom_components/mikrotik_dhcp_sync/dhcp_bridge.py
 
 Future Home Assistant Core DHCP changes may require updates to that module.
 
+## Optional DHCP Browser Dashboard Card
+
+The bundled `custom:mikrotik-dhcp-browser-card` displays **Home Assistant's existing
+DHCP discovery cache**, including devices discovered by other sources. It makes
+no RouterOS requests and creates no entities, history, or persistent database.
+An **administrator account** is required; Home Assistant's server authorization
+checks remain in force.
+
+Example appearance (illustrative data):
+
+```text
+DHCP Browser — 987 devices                       [Refresh]
+Search devices [hostname, IP or MAC…]            Rows [50]
+
+Hostname ↑          IP Address          MAC Address
+shelly-pump         192.168.10.45        A4:CF:12:34:56:78
+esp32-tank          192.168.10.62        E0:72:A1:15:6F:68
+brother-printer     192.168.153.199      48:5F:99:36:55:2C
+
+987 matching / 987 total                  Previous 1 / 20 Next
+```
+
+### Automatic installation
+
+1. Install/update the integration through HACS or manually as described above.
+2. Restart Home Assistant and add the MikroTik DHCP Sync integration if necessary.
+3. Reload your browser, then add a Manual dashboard card using the YAML below
+   (or choose **DHCP Browser** in the custom card picker).
+
+For the normal **UI-managed resource** configuration, the integration serves and
+registers the bundled JavaScript automatically. There is no file to copy and no
+resource to register manually. Existing installations using the previous
+`/local/mikrotik-dhcp-browser-card.js` instructions are migrated automatically;
+the old copied file can then be deleted.
+
+Registration is shared across integration entries and remains stable across
+reloads/restarts. When the bundled file changes, its content hash updates the
+resource URL to invalidate browser caches. Reload your browser after an upgrade.
+The HTTP route remains available for the Home Assistant process lifetime, and
+unloading a RouterOS entry does not remove a resource used by dashboards.
+When permanently uninstalling the integration, remove its cards and its resource
+under **Settings → Dashboards → Resources**, then restart Home Assistant.
+
+Static serving uses Home Assistant's
+[HTTP static-path API](https://developers.home-assistant.io/blog/2024/06/18/async_register_static_paths/).
+Automatic registration uses Lovelace's internal
+[resource collection](https://github.com/home-assistant/core/blob/2026.10.0/homeassistant/components/lovelace/resources.py),
+isolated in `frontend.py`. A future Core change could require an update to that
+module. Registration errors are logged without stopping DHCP lease sync.
+
+### YAML-managed resources and manual fallback
+
+If your resources are managed in YAML, merge this into the existing `lovelace`
+section of `configuration.yaml`, then reload resources or restart Home Assistant:
+
+```yaml
+lovelace:
+  resource_mode: yaml
+  resources:
+    - url: /mikrotik_dhcp_sync/mikrotik-dhcp-browser-card.js
+      type: module
+```
+
+No file copy is needed. The integration does not rewrite your YAML. If automatic
+registration fails in UI mode, add the same URL as a **JavaScript module** under
+**Settings → Dashboards → Resources** (enable Advanced Mode in your profile if
+needed). See Home Assistant's
+[resource instructions](https://developers.home-assistant.io/docs/frontend/custom-ui/registering-resources/).
+
+For standalone use **without configuring this integration**, copy
+`custom_components/mikrotik_dhcp_sync/frontend/mikrotik-dhcp-browser-card.js` to
+`/config/www/mikrotik-dhcp-browser-card.js` and register
+`/local/mikrotik-dhcp-browser-card.js?v=1` as a JavaScript module instead. Restart
+Home Assistant if you just created `www`. Ensure HA's `dhcp` integration is loaded
+(normally through `default_config:`). On standalone upgrades, copy the updated
+file, increment the version in the existing resource, and reload your browser.
+
+### Dashboard configuration
+
+```yaml
+type: custom:mikrotik-dhcp-browser-card
+title: DHCP Browser
+page_size: 50
+```
+
+```yaml
+type: custom:mikrotik-dhcp-browser-card
+title: Network Devices
+page_size: 50
+subnet: 192.168.40.0/22
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `type` | Required | `custom:mikrotik-dhcp-browser-card` |
+| `title` | `DHCP Browser` | Card heading |
+| `page_size` | `50` | Initial rows per page: `25`, `50`, or `100` |
+| `subnet` | None | Optional IPv4 CIDR; `/0` through `/32` supported |
+
+Search matches hostname, IP, or displayed MAC without case sensitivity. Click a
+column heading to toggle ascending/descending sorting; IPs sort numerically.
+Missing hostnames/IPs show `—`; malformed MAC records are skipped. IPv6 addresses
+are displayed and sorted too, but CIDR filtering currently supports IPv4 only.
+The page selector is local to the card. Search, sorting, filtering, and pagination
+happen in the browser before rendering at most 100 device rows. Multiple cards
+on the same HA connection share one subscription. Unrelated entity state updates
+do not rebuild the table. Theme colors follow Home Assistant; narrow screens can
+scroll the table horizontally.
+
+### Cache updates, removals, and compatibility
+
+Protocol compatibility was checked against Core **2026.8.0** and **2026.10.0**
+source; these are reference versions, not a claim that every earlier version is
+unsupported. The browser must support native JS modules, Web Components, and
+BigInt. The card shows an error if DHCP's command is unavailable.
+
+Core's [DHCP WebSocket implementation](https://github.com/home-assistant/core/blob/2026.10.0/homeassistant/components/dhcp/websocket_api.py)
+(also [2026.8.0](https://github.com/home-assistant/core/blob/2026.8.0/homeassistant/components/dhcp/websocket_api.py))
+sends `{add: [...]}`: a full snapshot on subscription, then incremental updates.
+Records are merged by MAC. **There is no removal notification**, including when
+this integration deletes stale cache entries; an empty `add` is not a reset.
+Removed devices can remain displayed until **Refresh**, a connection reconnect,
+or leaving/reopening the dashboard after its cards disconnect. Refresh replaces
+the shared subscription and takes a new snapshot. There is no periodic full-cache
+polling, and refreshing never triggers a RouterOS poll.
+
+The [HA WebSocket client](https://github.com/home-assistant/home-assistant-js-websocket/blob/master/lib/connection.ts)
+automatically restores subscriptions after reconnect. The card treats the next
+event as a replacement snapshot and releases its subscription when its last
+instance disconnects, including a late subscription acknowledgement. Connection
+failures are shown in the card; Refresh retries a failed initial subscription.
+Cache contents represent discovery history, not proof that a device is online.
+
 ## Development
 
 Run tests with:
 
 ```bash
 pytest
+node --test tests/frontend/card.test.mjs
 ```
 
 The test suite focuses on DHCP cache import behavior and the integration's
 minimal contract: no entities, no devices for clients, and no persistent DHCP
 lease storage.
+
+The frontend tests use Node.js 20+ and its built-in test runner, with no npm
+dependencies or build step. An optional real-browser smoke test covers rendering
+and interaction with 2,000 mock records, subscription sharing, mobile light/dark
+themes, and cleanup:
+
+```bash
+npm install --no-save --package-lock=false playwright
+npx playwright install chromium
+npm run test:browser
+```
+
+Set `PLAYWRIGHT_CHANNEL=msedge` to use installed Edge instead of downloaded
+Chromium, or `PLAYWRIGHT_MODULE` to an existing Playwright module entry point.
+`CARD_SCREENSHOT_DIR` optionally saves mobile light/dark screenshots. These are
+mock protocol/browser tests; an authenticated live Home Assistant instance is
+still recommended for final deployment validation.
 
 ## Safety Notes
 

@@ -4,6 +4,7 @@
   "codeowners": [],
   "config_flow": true,
   "dependencies": ["dhcp"],
+  "after_dependencies": ["http", "frontend", "lovelace"],
   "documentation": "https://github.com/hmsta/ha-mikrotik-dhcp-sync",
   "integration_type": "hub",
   "iot_class": "local_polling",

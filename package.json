@@ -1,0 +1,9 @@
+{
+  "name": "mikrotik-dhcp-browser-card",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/frontend/card.test.mjs",
+    "test:browser": "node tests/frontend/browser.mjs"
+  }
+}

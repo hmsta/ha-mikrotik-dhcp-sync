@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from ipaddress import ip_address
 import importlib
+from pathlib import Path
 import sys
 import types
 
@@ -104,6 +105,15 @@ def dhcp_bridge(monkeypatch):
         sys.modules, "homeassistant.helpers.device_registry", device_registry
     )
     monkeypatch.setitem(sys.modules, "cached_ipaddress", cached_ipaddress)
+
+    # Test the bridge in isolation: importing its parent __init__ would load the
+    # coordinator/config-entry runtime, which these minimal HA stubs don't model.
+    package_name = "custom_components.mikrotik_dhcp_sync"
+    package = types.ModuleType(package_name)
+    package.__path__ = [
+        str(Path(__file__).parents[1] / "custom_components" / "mikrotik_dhcp_sync")
+    ]
+    monkeypatch.setitem(sys.modules, package_name, package)
 
     return importlib.import_module("custom_components.mikrotik_dhcp_sync.dhcp_bridge")
 
