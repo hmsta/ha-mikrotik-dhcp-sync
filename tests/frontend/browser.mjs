@@ -50,6 +50,20 @@ try {
   assert.equal(await card.locator("tbody tr").count(), 25);
   assert.match(await card.locator("h2").innerText(), /2000 devices/);
   assert.equal(await card.locator("tbody img").count(), 0);
+  // Dashboard containers can disable selection; table text must override that.
+  await page.evaluate(() => { document.body.style.userSelect = "none"; });
+  const ipCell = card.locator("tbody tr").first().locator("td").nth(1);
+  await ipCell.dblclick({ position: { x: 20, y: 12 } });
+  assert.ok(await page.evaluate(() => window.getSelection().toString().length > 0));
+  assert.equal(await page.evaluate(() => card.getGridOptions().columns), "full");
+  assert.ok(await card.locator("tbody tr").nth(1).evaluate((row) => row.getBoundingClientRect().height <= 30));
+  assert.equal(await card.getByRole("searchbox").evaluate((input) => getComputedStyle(input).backgroundColor), "rgb(255, 255, 255)");
+  assert.equal(await page.evaluate(async () => {
+    const before = window.getSelection().toString();
+    for (const cb of callbacks) cb({ add: [] });
+    await new Promise(requestAnimationFrame);
+    return window.getSelection().toString() === before;
+  }), true);
   // HA state churn must neither subscribe again nor replace the DOM rows.
   assert.equal(await page.evaluate(async () => {
     const row = card.shadowRoot.querySelector("tbody tr");

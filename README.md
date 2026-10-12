@@ -404,6 +404,11 @@ on the same HA connection share one subscription. Unrelated entity state updates
 do not rebuild the table. Theme colors follow Home Assistant; narrow screens can
 scroll the table horizontally.
 
+The card defaults to the full width of its section, with compact table rows and
+selectable text for copying hostnames, IPs, and MACs. If an existing card has an
+explicit narrower layout saved, enable **Full width card** in its Layout tab or
+set `grid_options: {columns: full}` in its YAML to override that saved setting.
+
 ### Cache updates, removals, and compatibility
 
 Protocol compatibility was checked against Core **2026.8.0** and **2026.10.0**

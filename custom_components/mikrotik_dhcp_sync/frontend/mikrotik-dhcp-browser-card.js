@@ -214,35 +214,42 @@ export class MikrotikDhcpBrowserCard extends HTMLElement {
     // All dynamic content is assigned via textContent, never parsed as HTML.
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display:block; color:var(--primary-text-color); }
-        ha-card { overflow:hidden; }
-        .header,.controls,.footer { padding:16px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-        h2 { font-size:20px; font-weight:400; margin:0; flex:1; }
+        :host { display:block; min-width:0; width:100%; color:var(--primary-text-color); }
+        ha-card { display:block; max-width:100%; overflow:hidden; width:100%; }
+        ha-card,.wrap,table,th,td,button { user-select:text; -webkit-user-select:text; }
+        .wrap { box-sizing:border-box; min-width:0; padding:12px; width:100%; }
+        .header,.controls,.footer { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .header,.controls { margin-bottom:8px; }
+        h2 { font-size:18px; font-weight:400; margin:0; flex:1; }
         button,input,select { font:inherit; color:var(--primary-text-color); }
-        button,select { background:var(--card-background-color,var(--ha-card-background)); border:1px solid var(--divider-color,#aaa); border-radius:6px; padding:8px; }
-        button { cursor:pointer; min-height:40px; }
+        button,input,select { box-sizing:border-box; background:var(--card-background-color,var(--ha-card-background,#fff)); border:1px solid var(--divider-color,#aaa); border-radius:6px; min-height:32px; padding:0 8px; font-size:13px; }
+        button { cursor:pointer; }
         button:disabled { opacity:.45; cursor:default; }
         button:focus-visible,input:focus-visible,select:focus-visible { outline:2px solid var(--primary-color); outline-offset:2px; }
-        .controls { padding-top:0; }
-        .search { flex:1; min-width:160px; }
-        input { box-sizing:border-box; width:100%; padding:10px; background:var(--secondary-background-color); border:1px solid var(--divider-color,#aaa); border-radius:6px; }
-        label { font-size:14px; }
-        .scroll { overflow-x:auto; }
-        table { width:100%; border-collapse:collapse; font-size:14px; }
-        th,td { text-align:left; padding:10px 16px; border-bottom:1px solid var(--divider-color,#ddd); }
-        th { background:var(--secondary-background-color); }
-        th button { border:0; background:none; padding:0; font-weight:600; white-space:nowrap; }
-        td:first-child { overflow-wrap:anywhere; min-width:100px; }
+        .search { flex:1 1 220px; min-width:160px; }
+        input { width:100%; cursor:text; user-select:text; -webkit-user-select:text; }
+        input:focus { border-color:var(--primary-color,#03a9f4); }
+        label { font-size:13px; }
+        .scroll { overflow-x:auto; overflow-y:visible; width:100%; }
+        table { width:100%; min-width:max-content; border-collapse:collapse; font-size:13px; line-height:normal; user-select:text; -webkit-user-select:text; }
+        th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--divider-color,#ddd); white-space:nowrap; }
+        td { user-select:text; -webkit-user-select:text; cursor:text; }
+        th { background:var(--card-background-color,var(--ha-card-background,#fff)); position:sticky; top:0; z-index:1; }
+        th button { border:0; background:transparent; min-height:0; padding:0; font-weight:400; white-space:nowrap; }
         td:not(:first-child) { white-space:nowrap; font-variant-numeric:tabular-nums; }
-        .status,.note { padding:0 16px 12px; color:var(--secondary-text-color); font-size:13px; }
+        .status,.note { color:var(--secondary-text-color); font-size:12px; margin-top:8px; }
+        .status { margin:0 0 8px; }
         .status:empty { display:none; }
-        .footer { font-size:13px; }
+        .footer { font-size:12px; margin-top:8px; }
+        .counts,.page { color:var(--secondary-text-color); }
         .counts { flex:1; min-width:140px; }
-        @media(max-width:450px) { th,td { padding:8px; } .header,.controls,.footer { padding:12px; gap:8px; } }
+        @media(max-width:760px) { .wrap { padding:10px; } }
       </style>
       <ha-card>
-        <div class="header"><h2></h2><button class="refresh" title="Reload the cache, including removals">Refresh</button></div>
-        <div class="controls"><label class="search">Search devices<input type="search" placeholder="Hostname, IP or MAC" aria-label="Search devices"></label>
+        <div class="wrap">
+        <div class="header"><h2></h2></div>
+        <div class="controls"><label class="search"><input type="search" placeholder="Search hostname, IP or MAC" aria-label="Search devices" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+          <button class="refresh" title="Reload the cache, including removals">Refresh</button>
           <label>Rows <select aria-label="Rows per page"><option>25</option><option selected>50</option><option>100</option></select></label></div>
         <div class="status" role="status"></div>
         <div class="scroll" tabindex="0" role="region" aria-label="DHCP devices">
@@ -250,6 +257,7 @@ export class MikrotikDhcpBrowserCard extends HTMLElement {
         </div>
         <div class="footer"><span class="counts" aria-live="polite"></span><button class="previous" aria-label="Previous page">Previous</button><span class="page"></span><button class="next" aria-label="Next page">Next</button></div>
         <div class="note">Home Assistant DHCP cache · Removals appear after Refresh or reconnect.</div>
+        </div>
       </ha-card>`;
     const root = this.shadowRoot;
     root.querySelector("input").addEventListener("input", (event) => { this._search = event.target.value; this._page = 0; this._scheduleRender(); });
@@ -284,6 +292,10 @@ export class MikrotikDhcpBrowserCard extends HTMLElement {
       const label = { hostname: "Hostname", ip_address: "IP Address", mac_address: "MAC Address" }[th.dataset.sort];
       th.querySelector("button").textContent = label + (direction === "none" ? "" : direction === "ascending" ? " ↑" : " ↓");
     }
+    // Keep selection intact when a notification does not change this page.
+    const rowKey = JSON.stringify([result.total > 0, result.rows.map((row) => [row.hostname, row.ip_address, row.mac_address])]);
+    if (rowKey === this._renderedRows) return;
+    this._renderedRows = rowKey;
     const fragment = document.createDocumentFragment();
     for (const row of result.rows) {
       const tr = document.createElement("tr");
@@ -304,7 +316,8 @@ export class MikrotikDhcpBrowserCard extends HTMLElement {
     root.querySelector("tbody").replaceChildren(fragment);
   }
   getCardSize() { return 5; }
-  static getStubConfig() { return { title: "DHCP Browser", page_size: 50 }; }
+  getGridOptions() { return { columns: "full" }; }
+  static getStubConfig() { return { title: "DHCP Browser", page_size: 50, grid_options: { columns: "full" } }; }
 }
 
 if (!customElements.get("mikrotik-dhcp-browser-card")) {
