@@ -1,15 +1,23 @@
 # MikroTik DHCP Sync
 
 Minimal Home Assistant custom integration for syncing active MikroTik RouterOS
-DHCP leases into Home Assistant's existing in-memory DHCP discovery cache.
+DHCP leases through Home Assistant's DHCP discovery processor and into its
+existing in-memory cache.
 
 Integration domain: `mikrotik_dhcp_sync`
 
 ## What It Does
 
 This integration polls the MikroTik RouterOS DHCP lease table through the native
-RouterOS API and injects valid active DHCP client records into Home Assistant's
-RAM-based DHCP cache.
+RouterOS API and passes new or changed valid active DHCP client records through
+Home Assistant's native DHCP processor. This updates the RAM-based DHCP cache,
+notifies browser subscribers, and dispatches DHCP discovery to integrations
+matched by Home Assistant's own rules.
+
+For example, an IP change for an already registered ESPHome device reaches its
+DHCP handler, which decides whether to update the connection. New ESPHome devices
+are not discovered this way: ESPHome's DHCP matcher only covers registered
+devices. This integration does not probe devices or synthesize mDNS discovery.
 
 Injected records are visible in Home Assistant's DHCP browser:
 
@@ -36,7 +44,7 @@ device.macaddress
 
 ## What It Does Not Do
 
-This integration intentionally does not create:
+This integration itself does not create:
 
 - device tracker entities
 - scanner entities
@@ -48,6 +56,9 @@ This integration intentionally does not create:
 - entity registry entries for DHCP clients
 - persistent DHCP lease storage
 - recorder or history data
+
+Matching integrations may offer their normal setup flows or update existing
+connections in response to DHCP observations.
 
 DHCP client data exists only in Home Assistant's existing in-memory DHCP cache.
 The integration's own config entry, including RouterOS connection settings, is
@@ -276,18 +287,27 @@ Existing hostnames are preserved using Home Assistant's current DHCP update
 rule. For example, a new empty hostname will not overwrite an existing useful
 hostname at the same IP.
 
+Unchanged leases do not repeatedly dispatch discovery. A new MAC at an old IP
+is processed as a new identity; it does not automatically replace an existing
+configured device. Cache cleanup does not remove configured integrations.
+
 ## Private Home Assistant DHCP API
 
-This integration intentionally uses Home Assistant's internal DHCP helper:
+This integration intentionally uses Home Assistant's internal DHCP APIs:
 
 ```python
 from homeassistant.components.dhcp.helpers import (
     async_get_address_data_internal,
 )
+from homeassistant.components.dhcp import WatcherBase
+from homeassistant.components.dhcp.models import DATA_DHCP
 ```
 
-Home Assistant explicitly marks this helper as internal and not intended for
-integrations. All private DHCP cache access is isolated in:
+Home Assistant explicitly marks the cache helper as internal and not intended
+for integrations. `WatcherBase` is also internal; it is instantiated only to
+process observations, without starting a network watcher. Changed leases are
+passed to `async_process_client` before any cache write, so HA's unchanged-record
+guard cannot suppress their discovery. All private DHCP access is isolated in:
 
 ```text
 custom_components/mikrotik_dhcp_sync/dhcp_bridge.py

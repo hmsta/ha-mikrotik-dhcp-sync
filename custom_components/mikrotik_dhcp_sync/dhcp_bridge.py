@@ -13,8 +13,10 @@ import re
 from typing import Any
 
 from cached_ipaddress import cached_ip_addresses
+from homeassistant.components.dhcp import WatcherBase
 from homeassistant.components.dhcp.const import HOSTNAME, IP_ADDRESS
 from homeassistant.components.dhcp.helpers import async_get_address_data_internal
+from homeassistant.components.dhcp.models import DATA_DHCP
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import format_mac
 
@@ -38,8 +40,11 @@ def async_import_leases_to_dhcp_cache(
     authoritative_sync: bool = False,
     hostname_fallback_rules: dict[str, str] | None = None,
 ) -> dict[str, dict[str, str]]:
-    """Sync active MikroTik leases into HA's DHCP address cache."""
+    """Process active MikroTik leases through HA's DHCP discovery pipeline."""
     address_data = async_get_address_data_internal(hass)
+    # Use the native processor without starting another network watcher. It owns
+    # cache writes, subscriber notifications, matching, and discovery dispatch.
+    processor = WatcherBase(hass, hass.data[DATA_DHCP])
     changed: dict[str, dict[str, str]] = {}
     desired: dict[str, dict[str, str]] = {}
 
@@ -78,11 +83,10 @@ def async_import_leases_to_dhcp_cache(
         ):
             continue
 
-        address_data[mac_key] = desired_data
-        changed[mac_key] = desired_data
-
-    if changed or authoritative_sync:
-        _async_notify_dhcp_subscribers(hass, changed)
+        # Do not prepopulate the cache: HA would see an unchanged observation
+        # and return before notifying the matching integrations.
+        processor.async_process_client(compressed_ip, hostname, mac_key)
+        changed[mac_key] = address_data[mac_key]
 
     return changed
 
@@ -132,24 +136,3 @@ def _normalize_lease(ip_address: Any, raw_mac: Any) -> tuple[str, str] | None:
         return None
 
     return formatted_mac.replace(":", ""), made_ip_address.compressed
-
-
-@callback
-def _async_notify_dhcp_subscribers(
-    hass: HomeAssistant, changed: dict[str, dict[str, str]]
-) -> None:
-    """Notify DHCP Browser websocket subscribers about changed cache records only."""
-    try:
-        from homeassistant.components.dhcp.models import DATA_DHCP
-
-        callbacks = hass.data[DATA_DHCP].callbacks
-    except (AttributeError, KeyError, ImportError):
-        _LOGGER.debug("DHCP subscriber callbacks are unavailable")
-        return
-
-    for callback_ in tuple(callbacks):
-        try:
-            callback_(changed)
-        except Exception:
-            _LOGGER.exception("DHCP subscriber callback failed")
-

@@ -18,6 +18,7 @@ class FakeDhcpData:
 
     address_data: dict[str, dict[str, str]] = field(default_factory=dict)
     callbacks: set = field(default_factory=set)
+    processed: list = field(default_factory=list)
 
 
 @dataclass
@@ -60,6 +61,24 @@ def dhcp_bridge(monkeypatch):
         ]
 
     dhcp.async_discovered_service_info = async_discovered_service_info
+
+    class WatcherBase:
+        """Record delegation and simulate native cache/browser ownership."""
+
+        def __init__(self, hass, data):
+            self.data = data
+
+        def async_process_client(self, ip, hostname, mac):
+            previous = self.data.address_data.get(mac)
+            # Regression guard: prewriting the cache suppresses HA discovery.
+            assert previous != {"ip": ip, "hostname": hostname}
+            self.data.processed.append((ip, hostname, mac, previous))
+            record = {"ip": ip, "hostname": hostname}
+            self.data.address_data[mac] = record
+            for callback in self.data.callbacks:
+                callback({mac: record})
+
+    dhcp.WatcherBase = WatcherBase
     dhcp_helpers = types.ModuleType("homeassistant.components.dhcp.helpers")
     dhcp_helpers.async_get_address_data_internal = lambda hass: hass.data[
         "dhcp"
@@ -462,3 +481,57 @@ def test_public_dhcp_service_info_sees_injected_record(dhcp_bridge, hass):
     assert devices[0].ip == "192.168.1.10"
     assert devices[0].hostname == "phone"
     assert devices[0].macaddress == "aabbccddeeff"
+
+
+def test_new_and_changed_ip_reach_native_processor_before_cache_write(dhcp_bridge, hass):
+    lease = {
+        "active-address": "192.168.1.10",
+        "host-name": "ESPHome-Node",
+        "mac-address": "AA:BB:CC:DD:EE:FF",
+    }
+    seen = []
+    hass.data["dhcp"].callbacks.add(seen.append)
+    import_leases(dhcp_bridge, hass, [lease])
+    assert import_leases(dhcp_bridge, hass, [lease]) == {}
+    lease["active-address"] = "192.168.1.11"
+    import_leases(dhcp_bridge, hass, [lease])
+
+    assert hass.data["dhcp"].processed == [
+        ("192.168.1.10", "ESPHome-Node", "aabbccddeeff", None),
+        ("192.168.1.11", "ESPHome-Node", "aabbccddeeff",
+         {"ip": "192.168.1.10", "hostname": "ESPHome-Node"}),
+    ]
+    # Native processing notifies once per change; the bridge must not duplicate it.
+    assert len(seen) == 2
+
+
+def test_changed_mac_is_processed_as_new_identity(dhcp_bridge, hass):
+    hass.data["dhcp"].address_data["001122334455"] = {
+        "ip": "192.168.1.10", "hostname": "old-device",
+    }
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass,
+        [{"active-address": "192.168.1.10", "host-name": "replacement",
+          "mac-address": "AA:BB:CC:DD:EE:FF"}],
+        authoritative_sync=True,
+    )
+    assert hass.data["dhcp"].processed == [
+        ("192.168.1.10", "replacement", "aabbccddeeff", None)
+    ]
+    assert "001122334455" not in hass.data["dhcp"].address_data
+
+
+def test_invalid_and_filtered_leases_do_not_reach_native_processor(dhcp_bridge, hass):
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass,
+        [
+            {"active-address": "bad", "host-name": "node",
+             "mac-address": "AA:BB:CC:DD:EE:FF"},
+            {"active-address": "192.168.1.10",
+             "mac-address": "AA:BB:CC:DD:EE:FF"},
+            {"address": "192.168.1.11", "host-name": "inactive",
+             "mac-address": "AA:BB:CC:DD:EE:FF"},
+        ],
+        skip_empty_hostnames=True,
+    )
+    assert hass.data["dhcp"].processed == []
