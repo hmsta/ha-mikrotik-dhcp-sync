@@ -12,6 +12,7 @@ CONF_SCAN_INTERVAL = "scan_interval"
 CONF_SKIP_EMPTY_HOSTNAMES = "skip_empty_hostnames"
 CONF_AUTHORITATIVE_SYNC = "authoritative_sync"
 CONF_HOSTNAME_FALLBACK_RULES = "hostname_fallback_rules"
+CONF_ESPHOME_HOSTNAME_FILTER = "esphome_hostname_filter"
 
 DEFAULT_PORT = 8728
 DEFAULT_SCAN_INTERVAL_SECONDS = 30
@@ -23,6 +24,7 @@ DEFAULT_HOSTNAME_FALLBACK_RULES = ""
 UPDATE_INTERVAL = timedelta(seconds=DEFAULT_SCAN_INTERVAL_SECONDS)
 
 LEASE_ACTIVE_ADDRESS = "active-address"
+LEASE_ACTIVE_MAC = "active-mac-address"
 LEASE_ADDRESS = "address"
 LEASE_HOSTNAME = "host-name"
 LEASE_MAC = "mac-address"

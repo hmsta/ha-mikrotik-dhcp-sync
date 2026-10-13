@@ -17,7 +17,7 @@ matched by Home Assistant's own rules.
 For example, an IP change for an already registered ESPHome device reaches its
 DHCP handler, which decides whether to update the connection. New ESPHome devices
 are not discovered this way: ESPHome's DHCP matcher only covers registered
-devices. This integration does not probe devices or synthesize mDNS discovery.
+devices. Optional ESPHome probing can discover new devices as described below.
 
 Injected records are visible in Home Assistant's DHCP browser:
 
@@ -60,7 +60,7 @@ This integration itself does not create:
 Matching integrations may offer their normal setup flows or update existing
 connections in response to DHCP observations.
 
-DHCP client data exists only in Home Assistant's existing in-memory DHCP cache.
+DHCP cache records and optional discovery bookkeeping remain in memory.
 The integration's own config entry, including RouterOS connection settings, is
 stored by Home Assistant like any other config entry.
 
@@ -192,6 +192,7 @@ The config flow asks for:
 - `skip leases without hostnames`
 - `delete DHCP cache entries missing from MikroTik`
 - `hostname fallback rules`
+- `potential ESPHome devices (hostname contains)`
 
 The default port is `8728`.
 
@@ -226,22 +227,65 @@ Assistant's official `mikrotik` integration.
 After installation, these options can be changed from the integration's
 `Configure` flow in Home Assistant.
 
+## Optional ESPHome Discovery
+
+Leave **Potential ESPHome devices (hostname contains)** empty to disable this
+feature (the default). To enable it, enter words such as:
+
+```text
+esp32 sonoff
+```
+
+Words may be separated by spaces, commas, semicolons, or newlines. A real RouterOS
+DHCP hostname qualifies if it contains **any** word, ignoring case. For example,
+`bedroom-Sonoff-switch` qualifies. Hostname fallback rules are not used for this
+filter. It applies to matching active leases on the configured router, across
+all its DHCP servers; there is no automatic VLAN restriction.
+
+On startup/enabling the option, existing matching leases are considered too.
+New MACs, changed active IPs, and changed matching hostnames are reconsidered.
+Configured, disabled, ignored, and pending ESPHome devices are checked before
+probing. Unchanged successful observations are not repeatedly probed, even if
+their setup suggestion is dismissed. Candidate history is in RAM and resets on
+reload/restart; configured and ignored entries remain protected by HA's records.
+
+Probing connects directly to the active IP on **TCP 6053** using `aioesphomeapi`.
+It requires an ESPHome device-info response or an identifiable encrypted server
+hello, not just an open port. A returned MAC must agree with the DHCP lease;
+older encrypted firmware that supplies only a name uses the lease MAC. Devices
+using a custom API port or without the native API enabled are not supported.
+
+Confirmed candidates are handed internally to HA's ESPHome Zeroconf config flow
+and appear as normal discovery suggestions. No multicast announcement or local
+DNS record is created. HA handles confirmation and encryption-key entry; this
+integration does not provision keys or automatically complete device setup.
+The synthetic Zeroconf handoff depends on HA's ESPHome config-flow behavior and
+is isolated in `esphome_discovery.py` for future compatibility updates.
+
+Probes run in the background, one per router and at most two across all router
+entries, with a ten-second timeout. Failures retry on the first DHCP poll after
+1 minute, then 5 minutes, 30 minutes, and subsequently every 6 hours. Missing
+leases drop out of the candidate set. Unloading/reconfiguring cancels pending
+work. Normal DHCP syncing continues independently.
+
+ESPHome's Python requirements are loaded lazily for the first eligible probe,
+using the versions required by your installed HA release. Leaving the field
+empty neither installs these requirements nor starts probes. Clearing the field
+disables future probing; it does not remove already offered or configured devices.
+
 ## Lease Import Rules
 
 Only active leases are imported. A lease is considered active when RouterOS
 reports `active-address`.
 
-The IP address is normally read from:
-
-```text
-address
-```
-
-If `address` is missing, the integration falls back to:
+The IP address is read from the actual active lease:
 
 ```text
 active-address
 ```
+
+The configured `address` reservation is not used: it may differ from the IP
+currently assigned to the client.
 
 The hostname is read only from:
 
@@ -261,8 +305,11 @@ can be disabled in the integration options.
 The MAC address is read from:
 
 ```text
-mac-address
+active-mac-address
 ```
+
+If RouterOS omits that field, `mac-address` is used instead. Malformed non-text
+hostnames are treated as missing rather than stopping the synchronization.
 
 MAC addresses are normalized to Home Assistant's historical DHCP cache key
 format:
@@ -278,6 +325,11 @@ Malformed MAC addresses and invalid or unsupported IP addresses are skipped.
 By default, the integration treats active MikroTik DHCP leases as authoritative.
 After each successful RouterOS poll, Home Assistant's DHCP cache is updated so
 that MAC addresses missing from the validated MikroTik result are removed.
+
+When multiple router entries are loaded, their most recent successful MAC sets
+are retained together so one router's cleanup does not delete another router's
+active records. Unloading a router releases its retention set; a later
+authoritative poll can then clean up records no longer supplied by any router.
 
 Disable `Delete DHCP cache entries missing from MikroTik` if you want the older
 additive behavior where MikroTik leases only insert/update HA DHCP cache records
@@ -465,6 +517,11 @@ node --test tests/frontend/card.test.mjs
 The test suite focuses on DHCP cache import behavior and the integration's
 minimal contract: no entities, no devices for clients, and no persistent DHCP
 lease storage.
+
+Install `pytest` and `voluptuous` for the Python tests. Installing the
+`aioesphomeapi` version used by HA also enables the optional localhost protocol
+tests for plaintext and encrypted discovery (validated with `46.6.0`). Without
+that library those two tests are skipped. They do not contact real devices.
 
 The frontend tests use Node.js 20+ and its built-in test runner, with no npm
 dependencies or build step. An optional real-browser smoke test covers rendering

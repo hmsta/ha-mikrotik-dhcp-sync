@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password",
+          "port": "Port",
+          "scan_interval": "Sync interval in seconds",
+          "skip_empty_hostnames": "Skip leases without hostnames",
+          "authoritative_sync": "Delete DHCP cache entries missing from MikroTik",
+          "hostname_fallback_rules": "Hostname fallback rules",
+          "esphome_hostname_filter": "Potential ESPHome devices (hostname contains)"
+        },
+        "data_description": {
+          "esphome_hostname_filter": "Optional: space- or comma-separated words, e.g. esp32 sonoff. Matches any word, ignoring case. Leave empty to disable probing."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Sync interval in seconds",
+          "skip_empty_hostnames": "Skip leases without hostnames",
+          "authoritative_sync": "Delete DHCP cache entries missing from MikroTik",
+          "hostname_fallback_rules": "Hostname fallback rules",
+          "esphome_hostname_filter": "Potential ESPHome devices (hostname contains)"
+        },
+        "data_description": {
+          "esphome_hostname_filter": "Optional: space- or comma-separated words, e.g. esp32 sonoff. Matches any word, ignoring case. Leave empty to disable probing."
+        }
+      }
+    }
+  }
+}

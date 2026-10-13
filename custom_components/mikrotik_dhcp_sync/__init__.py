@@ -14,8 +14,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up MikroTik DHCP Sync from a config entry."""
     await async_setup_frontend(hass)
     coordinator = MikrotikDhcpSyncCoordinator(hass, entry)
-    await coordinator.async_config_entry_first_refresh()
-    coordinator.async_start_polling()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+        coordinator.async_start_polling()
+    except BaseException:
+        # Failed or cancelled setup never reaches our normal unload path.
+        await coordinator.async_close()
+        raise
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))

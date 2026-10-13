@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 
 ROOT = Path(__file__).parents[1]
@@ -41,3 +42,8 @@ def test_no_persistent_dhcp_storage_or_recorder_usage():
     assert "async_get_or_create" not in source
     assert "device_tracker" not in source
 
+
+def test_english_ui_strings_are_shipped_for_custom_integration():
+    source = json.loads((INTEGRATION / "strings.json").read_text(encoding="utf-8"))
+    english = json.loads((INTEGRATION / "translations" / "en.json").read_text(encoding="utf-8"))
+    assert english == source

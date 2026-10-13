@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     CONF_AUTHORITATIVE_SYNC,
+    CONF_ESPHOME_HOSTNAME_FILTER,
     CONF_HOST,
     CONF_HOSTNAME_FALLBACK_RULES,
     CONF_PASSWORD,
@@ -27,7 +28,8 @@ from .const import (
     DEFAULT_SKIP_EMPTY_HOSTNAMES,
     DOMAIN,
 )
-from .dhcp_bridge import async_import_leases_to_dhcp_cache
+from .dhcp_bridge import async_forget_source, async_import_leases_to_dhcp_cache
+from .esphome_discovery import ESPHomeDiscovery
 from .routeros import RouterOSClient, looks_like_auth_error
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +54,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
             entry.data[CONF_PORT],
         )
         self._unsub_poll: CALLBACK_TYPE | None = None
+        self._closed = False
         self._skip_empty_hostnames = entry.options.get(
             CONF_SKIP_EMPTY_HOSTNAMES,
             entry.data.get(CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES),
@@ -69,6 +72,13 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
         self._hostname_fallback_rules = _parse_hostname_fallback_rules(
             fallback_rules_text
         )
+        self._esphome_discovery = ESPHomeDiscovery(
+            hass,
+            entry.options.get(
+                CONF_ESPHOME_HOSTNAME_FILTER,
+                entry.data.get(CONF_ESPHOME_HOSTNAME_FILTER, ""),
+            ),
+        )
 
     @staticmethod
     def _update_interval_from_entry(entry: ConfigEntry) -> timedelta:
@@ -82,7 +92,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
     @callback
     def async_start_polling(self) -> None:
         """Start periodic polling without relying on entity listeners."""
-        if self._unsub_poll is not None:
+        if self._closed or self._unsub_poll is not None or self.config_entry.pref_disable_polling:
             return
 
         async def _async_refresh(_: datetime) -> None:
@@ -97,6 +107,8 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
 
     async def _async_update_data(self) -> dict[str, dict[str, str]]:
         """Fetch RouterOS leases and import active clients into HA's DHCP cache."""
+        if self._closed:
+            return {}
         try:
             leases = await self.hass.async_add_executor_job(
                 self._client.fetch_dhcp_leases
@@ -115,19 +127,32 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
                 )
             raise UpdateFailed("Failed to fetch MikroTik DHCP leases") from err
 
-        return async_import_leases_to_dhcp_cache(
+        # Executor work may finish after unload/reload has started. Never
+        # publish those results or restart discovery from the old coordinator.
+        if self._closed:
+            return {}
+        changed = async_import_leases_to_dhcp_cache(
             self.hass,
             leases,
             skip_empty_hostnames=self._skip_empty_hostnames,
             authoritative_sync=self._authoritative_sync,
             hostname_fallback_rules=self._hostname_fallback_rules,
+            source_id=self.config_entry.entry_id,
         )
+        # Use this router's full snapshot, not HA's shared cache or only changes.
+        # This also finds existing candidates when discovery is first enabled.
+        self._esphome_discovery.async_update_leases(leases)
+        return changed
 
     async def async_close(self) -> None:
         """Close the RouterOS API connection."""
+        self._closed = True
         if self._unsub_poll is not None:
             self._unsub_poll()
             self._unsub_poll = None
+        await self.async_shutdown()
+        await self._esphome_discovery.async_close()
+        async_forget_source(self.hass, self.config_entry.entry_id)
         await self.hass.async_add_executor_job(self._client.close)
 
 

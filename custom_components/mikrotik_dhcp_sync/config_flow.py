@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_AUTHORITATIVE_SYNC,
+    CONF_ESPHOME_HOSTNAME_FILTER,
     CONF_HOST,
     CONF_HOSTNAME_FALLBACK_RULES,
     CONF_PASSWORD,
@@ -61,6 +62,7 @@ def _setup_schema() -> vol.Schema:
                 CONF_HOSTNAME_FALLBACK_RULES,
                 default=DEFAULT_HOSTNAME_FALLBACK_RULES,
             ): str,
+            vol.Optional(CONF_ESPHOME_HOSTNAME_FILTER, default=""): str,
         }
     )
 
@@ -90,9 +92,15 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             ): bool,
             vol.Optional(
                 CONF_HOSTNAME_FALLBACK_RULES,
-                default=defaults.get(
+                default=DEFAULT_HOSTNAME_FALLBACK_RULES,
+                description={"suggested_value": defaults.get(
                     CONF_HOSTNAME_FALLBACK_RULES, DEFAULT_HOSTNAME_FALLBACK_RULES
-                ),
+                )},
+            ): str,
+            vol.Optional(
+                CONF_ESPHOME_HOSTNAME_FILTER,
+                default="",
+                description={"suggested_value": defaults.get(CONF_ESPHOME_HOSTNAME_FILTER, "")},
             ): str,
         }
     )

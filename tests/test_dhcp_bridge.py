@@ -535,3 +535,45 @@ def test_invalid_and_filtered_leases_do_not_reach_native_processor(dhcp_bridge, 
         skip_empty_hostnames=True,
     )
     assert hass.data["dhcp"].processed == []
+
+
+def test_active_identity_takes_precedence_over_reservation(dhcp_bridge, hass):
+    import_leases(dhcp_bridge, hass, [{
+        "address": "192.168.1.50", "active-address": "192.168.1.20",
+        "mac-address": "00:00:00:00:00:00",
+        "active-mac-address": "AA:BB:CC:DD:EE:FF", "host-name": "node",
+    }])
+    assert hass.data["dhcp"].processed == [
+        ("192.168.1.20", "node", "aabbccddeeff", None)
+    ]
+
+
+def test_nonstring_hostname_does_not_break_sync(dhcp_bridge, hass):
+    hass.data["dhcp"].address_data["aabbccddeeff"] = {
+        "ip": "192.168.1.20", "hostname": "node",
+    }
+    import_leases(dhcp_bridge, hass, [{
+        "active-address": "192.168.1.20", "mac-address": "AA:BB:CC:DD:EE:FF",
+        "host-name": True,
+    }])
+    assert hass.data["dhcp"].address_data["aabbccddeeff"]["hostname"] == "node"
+
+
+def test_authoritative_routers_preserve_each_others_active_records(dhcp_bridge, hass):
+    first = [{"active-address": "192.168.1.10", "mac-address": "AA:BB:CC:DD:EE:FF"}]
+    second = [{"active-address": "192.168.2.10", "mac-address": "00:11:22:33:44:55"}]
+    for source, leases in [("first", first), ("second", second), ("first", first)]:
+        dhcp_bridge.async_import_leases_to_dhcp_cache(
+            hass, leases, authoritative_sync=True, source_id=source,
+        )
+    assert set(hass.data["dhcp"].address_data) == {"aabbccddeeff", "001122334455"}
+    assert len(hass.data["dhcp"].processed) == 2
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass, [], authoritative_sync=True, source_id="first",
+    )
+    assert set(hass.data["dhcp"].address_data) == {"001122334455"}
+    dhcp_bridge.async_forget_source(hass, "second")
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass, [], authoritative_sync=True, source_id="first",
+    )
+    assert hass.data["dhcp"].address_data == {}

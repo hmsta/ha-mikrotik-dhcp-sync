@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from threading import RLock
 
 
 class RouterOSClient:
@@ -15,9 +16,16 @@ class RouterOSClient:
         self._password = password
         self._port = port
         self._api: Any | None = None
+        # Executor jobs can outlive cancellation of the coroutine awaiting them.
+        self._lock = RLock()
 
     def connect(self) -> None:
         """Connect to RouterOS if not already connected."""
+        with self._lock:
+            self._connect()
+
+    def _connect(self) -> None:
+        """Connect while holding the client lock."""
         if self._api is not None:
             return
         import librouteros
@@ -31,23 +39,25 @@ class RouterOSClient:
 
     def close(self) -> None:
         """Close the RouterOS API connection."""
-        api = self._api
-        self._api = None
-        if api is None:
-            return
-        close = getattr(api, "close", None)
-        if close is not None:
-            close()
+        with self._lock:
+            api = self._api
+            self._api = None
+            if api is None:
+                return
+            close = getattr(api, "close", None)
+            if close is not None:
+                close()
 
     def fetch_dhcp_leases(self) -> list[dict[str, Any]]:
         """Fetch all DHCP leases using /ip/dhcp-server/lease/getall."""
-        self.connect()
-        assert self._api is not None
-        try:
-            return [dict(lease) for lease in self._api("/ip/dhcp-server/lease/getall")]
-        except Exception:
-            self.close()
-            raise
+        with self._lock:
+            self._connect()
+            assert self._api is not None
+            try:
+                return [dict(lease) for lease in self._api("/ip/dhcp-server/lease/getall")]
+            except Exception:
+                self.close()
+                raise
 
 
 def looks_like_auth_error(err: Exception) -> bool:
