@@ -26,10 +26,12 @@ from .const import (
     LEASE_HOSTNAME,
     LEASE_MAC,
 )
+from .discovery_filter import DiscoveryNetworks, discovery_allowed
 
 _LOGGER = logging.getLogger(__name__)
 _MAC_RE = re.compile(r"[0-9a-f]{2}(:[0-9a-f]{2}){5}")
 _SOURCES_KEY = "mikrotik_dhcp_sync_sources"
+_UNDISCOVERED_KEY = "mikrotik_dhcp_sync_undiscovered"
 
 
 @callback
@@ -41,11 +43,15 @@ def async_import_leases_to_dhcp_cache(
     authoritative_sync: bool = False,
     hostname_fallback_rules: dict[str, str] | None = None,
     source_id: str | None = None,
+    discovery_subnets: DiscoveryNetworks = (),
 ) -> dict[str, dict[str, str]]:
-    """Process active MikroTik leases through HA's DHCP discovery pipeline."""
+    """Cache active leases and dispatch discovery for allowed subnets."""
     address_data = async_get_address_data_internal(hass)
-    # Use the native processor without starting another network watcher. It owns
-    # cache writes, subscriber notifications, matching, and discovery dispatch.
+    # Remember cache-only observations across entry reloads so widening the
+    # allowlist can discover them even when their lease has not changed.
+    undiscovered = hass.data.setdefault(_UNDISCOVERED_KEY, {})
+    # For allowed subnets the native processor owns cache writes, notifications,
+    # matching, and discovery dispatch, without starting another network watcher.
     processor = WatcherBase(hass, hass.data[DATA_DHCP])
     changed: dict[str, dict[str, str]] = {}
     desired: dict[str, dict[str, str]] = {}
@@ -74,21 +80,42 @@ def async_import_leases_to_dhcp_cache(
         for mac_key in tuple(address_data):
             if mac_key not in retained_macs:
                 del address_data[mac_key]
+        for mac_key in tuple(undiscovered):
+            if mac_key not in address_data:
+                del undiscovered[mac_key]
 
     for mac_key, desired_data in desired.items():
         compressed_ip = desired_data[IP_ADDRESS]
         hostname = desired_data[HOSTNAME]
         current_data = address_data.get(mac_key)
-        if (
+        unchanged = (
             current_data
             and current_data[IP_ADDRESS] == compressed_ip
             and current_data[HOSTNAME].startswith(hostname)
-        ):
+        )
+        allowed = discovery_allowed(compressed_ip, discovery_subnets)
+        pending = mac_key in undiscovered and undiscovered[mac_key] == current_data
+        if unchanged and not (allowed and pending):
+            continue
+
+        if not allowed:
+            # Keep the DHCP Browser current without running integration matchers.
+            address_data[mac_key] = desired_data
+            undiscovered[mac_key] = desired_data.copy()
+            for subscriber in tuple(hass.data[DATA_DHCP].callbacks):
+                subscriber({mac_key: desired_data})
+            changed[mac_key] = desired_data
             continue
 
         # Do not prepopulate the cache: HA would see an unchanged observation
         # and return before notifying the matching integrations.
-        processor.async_process_client(compressed_ip, hostname, mac_key)
+        if unchanged:
+            processor.async_process_client(
+                compressed_ip, current_data[HOSTNAME], mac_key, force=True,
+            )
+        else:
+            processor.async_process_client(compressed_ip, hostname, mac_key)
+        undiscovered.pop(mac_key, None)
         changed[mac_key] = address_data[mac_key]
 
     return changed

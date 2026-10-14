@@ -53,9 +53,9 @@ def make_hass():
     )
 
 
-def manager(discovery, monkeypatch, words="esp32 sonoff"):
+def manager(discovery, monkeypatch, words="esp32 sonoff", **kwargs):
     hass = make_hass()
-    instance = discovery.ESPHomeDiscovery(hass, words)
+    instance = discovery.ESPHomeDiscovery(hass, words, **kwargs)
     instance._async_load_api = AsyncMock(return_value=object())
     probe = AsyncMock(return_value=discovery.DeviceInfo("real-node", "Bedroom", False))
     monkeypatch.setattr(discovery, "_async_probe", probe)
@@ -65,6 +65,51 @@ def manager(discovery, monkeypatch, words="esp32 sonoff"):
 async def drain(instance):
     if instance._task is not None:
         await instance._task
+
+
+def test_excluded_subnet_never_loads_dependencies_or_probes(discovery, monkeypatch):
+    from ipaddress import ip_network
+
+    async def run():
+        hass, instance, probe = manager(
+            discovery, monkeypatch, discovery_subnets=(ip_network("192.168.30.0/24"),),
+        )
+        record = lease()
+        record["address"] = "192.168.30.20"  # Reservation must not bypass active-IP filtering.
+        instance.async_update_leases([record])
+        assert not hass.tasks
+        instance._async_load_api.assert_not_awaited()
+        probe.assert_not_awaited()
+        instance.async_update_leases([lease(host="192.168.30.20")])
+        await drain(instance)
+        assert probe.await_count == 1
+        assert hass.config_entries.flow.async_init.await_count == 1
+    asyncio.run(run())
+
+
+def test_move_to_excluded_subnet_discards_inflight_result(discovery, monkeypatch):
+    from ipaddress import ip_network
+
+    async def run():
+        hass, instance, probe = manager(
+            discovery, monkeypatch, discovery_subnets=(ip_network("192.168.10.0/24"),),
+        )
+        entered, release = asyncio.Event(), asyncio.Event()
+
+        async def wait_probe(*args):
+            entered.set()
+            await release.wait()
+            return discovery.DeviceInfo("node", "Node", False)
+
+        probe.side_effect = wait_probe
+        instance.async_update_leases([lease()])
+        await asyncio.wait_for(entered.wait(), 1)
+        instance.async_update_leases([lease(host="192.168.50.20")])
+        release.set()
+        await drain(instance)
+        assert not instance._states
+        hass.config_entries.flow.async_init.assert_not_awaited()
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize("words", ["", "   \n, ; "])

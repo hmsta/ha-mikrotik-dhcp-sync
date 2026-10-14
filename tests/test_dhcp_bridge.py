@@ -68,10 +68,10 @@ def dhcp_bridge(monkeypatch):
         def __init__(self, hass, data):
             self.data = data
 
-        def async_process_client(self, ip, hostname, mac):
+        def async_process_client(self, ip, hostname, mac, force=False):
             previous = self.data.address_data.get(mac)
             # Regression guard: prewriting the cache suppresses HA discovery.
-            assert previous != {"ip": ip, "hostname": hostname}
+            assert force or previous != {"ip": ip, "hostname": hostname}
             self.data.processed.append((ip, hostname, mac, previous))
             record = {"ip": ip, "hostname": hostname}
             self.data.address_data[mac] = record
@@ -577,3 +577,92 @@ def test_authoritative_routers_preserve_each_others_active_records(dhcp_bridge, 
         hass, [], authoritative_sync=True, source_id="first",
     )
     assert hass.data["dhcp"].address_data == {}
+
+
+def test_subnet_exclusion_updates_browser_without_discovery(dhcp_bridge, hass):
+    from ipaddress import ip_network
+
+    seen = []
+    hass.data["dhcp"].callbacks.add(seen.append)
+    leases = [
+        {"active-address": "192.168.10.20", "host-name": "own-device",
+         "mac-address": "AA:BB:CC:DD:EE:FF"},
+        {"active-address": "192.168.50.20", "address": "192.168.10.21",
+         "host-name": "roborock-guest", "mac-address": "24:9E:7D:00:00:01"},
+    ]
+    options = dict(discovery_subnets=(ip_network("192.168.10.0/24"),), authoritative_sync=True)
+    changed = dhcp_bridge.async_import_leases_to_dhcp_cache(hass, leases, **options)
+    assert set(changed) == {"aabbccddeeff", "249e7d000001"}
+    assert len(seen) == 2
+    assert [record[0] for record in hass.data["dhcp"].processed] == ["192.168.10.20"]
+    assert dhcp_bridge.async_import_leases_to_dhcp_cache(hass, leases, **options) == {}
+    assert len(seen) == 2
+    leases[1]["active-address"] = "192.168.50.21"
+    dhcp_bridge.async_import_leases_to_dhcp_cache(hass, leases, **options)
+    assert len(seen) == 3
+    assert len(hass.data["dhcp"].processed) == 1
+    assert hass.data["dhcp"].address_data["249e7d000001"]["ip"] == "192.168.50.21"
+
+
+@pytest.mark.parametrize("clear", [False, True])
+def test_newly_allowed_cached_lease_discovers_once_after_reload(dhcp_bridge, hass, clear):
+    from ipaddress import ip_network
+
+    leases = [{"active-address": "192.168.50.20", "host-name": "guest",
+               "mac-address": "AA:BB:CC:DD:EE:FF"}]
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass, leases, source_id="router",
+        discovery_subnets=(ip_network("192.168.10.0/24"),),
+    )
+    assert not hass.data["dhcp"].processed
+    dhcp_bridge.async_forget_source(hass, "router")
+    allowed = () if clear else (ip_network("192.168.50.0/24"),)
+    for _ in range(2):
+        dhcp_bridge.async_import_leases_to_dhcp_cache(
+            hass, leases, source_id="router", discovery_subnets=allowed,
+        )
+    assert len(hass.data["dhcp"].processed) == 1
+    assert not hass.data[dhcp_bridge._UNDISCOVERED_KEY]
+
+
+def test_device_moving_outside_then_inside_allowlist(dhcp_bridge, hass):
+    from ipaddress import ip_network
+
+    record = {"active-address": "192.168.10.20", "host-name": "node",
+              "mac-address": "AA:BB:CC:DD:EE:FF"}
+    for host in ("192.168.10.20", "192.168.50.20", "192.168.10.21"):
+        record["active-address"] = host
+        dhcp_bridge.async_import_leases_to_dhcp_cache(
+            hass, [record], discovery_subnets=(ip_network("192.168.10.0/24"),),
+        )
+    assert [item[0] for item in hass.data["dhcp"].processed] == ["192.168.10.20", "192.168.10.21"]
+
+
+def test_excluded_lease_cleanup_releases_pending_discovery(dhcp_bridge, hass):
+    from ipaddress import ip_network
+
+    dhcp_bridge.async_import_leases_to_dhcp_cache(
+        hass, [{"active-address": "192.168.50.20", "host-name": "guest",
+                "mac-address": "AA:BB:CC:DD:EE:FF"}],
+        discovery_subnets=(ip_network("192.168.10.0/24"),),
+    )
+    dhcp_bridge.async_import_leases_to_dhcp_cache(hass, [], authoritative_sync=True)
+    assert not hass.data["dhcp"].address_data
+    assert not hass.data[dhcp_bridge._UNDISCOVERED_KEY]
+
+
+def test_overlapping_routers_with_different_filters_do_not_repeat_discovery(dhcp_bridge, hass):
+    from ipaddress import ip_network
+
+    leases = [{"active-address": "192.168.50.20", "host-name": "node",
+               "mac-address": "AA:BB:CC:DD:EE:FF"}]
+    for _ in range(2):
+        dhcp_bridge.async_import_leases_to_dhcp_cache(
+            hass, leases, source_id="restricted", authoritative_sync=True,
+            discovery_subnets=(ip_network("192.168.10.0/24"),),
+        )
+        dhcp_bridge.async_import_leases_to_dhcp_cache(
+            hass, leases, source_id="unrestricted", authoritative_sync=True,
+        )
+    assert len(hass.data["dhcp"].processed) == 1
+    assert not hass.data[dhcp_bridge._UNDISCOVERED_KEY]

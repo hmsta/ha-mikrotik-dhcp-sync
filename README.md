@@ -193,6 +193,7 @@ The config flow asks for:
 - `delete DHCP cache entries missing from MikroTik`
 - `hostname fallback rules`
 - `potential ESPHome devices (hostname contains)`
+- `discovery subnets`
 
 The default port is `8728`.
 
@@ -227,6 +228,32 @@ Assistant's official `mikrotik` integration.
 After installation, these options can be changed from the integration's
 `Configure` flow in Home Assistant.
 
+## Discovery Subnets
+
+Leave **Discovery subnets** empty to allow discovery from all subnets (the
+default). To limit discovery to your own networks, enter one or more CIDRs:
+
+```text
+192.168.10.0/24, 192.168.30.0/24
+```
+
+Spaces, commas, semicolons, and newlines are accepted as separators. IPv4 and
+IPv6 CIDRs are supported; an address such as `192.168.10.5/24` denotes the whole
+`192.168.10.0/24` network. Invalid entries cannot be saved.
+
+Only leases whose **active IP** belongs to an allowed subnet are passed to HA's
+DHCP integration discovery processor or considered for optional ESPHome probing.
+This applies per router entry. Excluded leases still update the DHCP Browser
+cache, subject to the usual active-lease and hostname rules. Existing discovery
+suggestions and configured integrations are not removed. Widening or clearing
+the filter also considers previously excluded, unchanged leases.
+
+This controls discovery initiated by MikroTik DHCP Sync, not HA's other
+discovery sources. HA can independently discover devices through mDNS, SSDP,
+native DHCP observations, or its own rediscovery of cached devices after an
+integration entry is removed. A visitor on an allowed subnet can still trigger
+discovery; put guest devices on an excluded subnet to filter their leases here.
+
 ## Optional ESPHome Discovery
 
 Leave **Potential ESPHome devices (hostname contains)** empty to disable this
@@ -240,7 +267,7 @@ Words may be separated by spaces, commas, semicolons, or newlines. A real Router
 DHCP hostname qualifies if it contains **any** word, ignoring case. For example,
 `bedroom-Sonoff-switch` qualifies. Hostname fallback rules are not used for this
 filter. It applies to matching active leases on the configured router, across
-all its DHCP servers; there is no automatic VLAN restriction.
+all its DHCP servers, restricted by **Discovery subnets** when configured.
 
 On startup/enabling the option, existing matching leases are considered too.
 New MACs, changed active IPs, and changed matching hostnames are reconsidered.
@@ -359,7 +386,10 @@ Home Assistant explicitly marks the cache helper as internal and not intended
 for integrations. `WatcherBase` is also internal; it is instantiated only to
 process observations, without starting a network watcher. Changed leases are
 passed to `async_process_client` before any cache write, so HA's unchanged-record
-guard cannot suppress their discovery. All private DHCP access is isolated in:
+guard cannot suppress their discovery. Excluded subnets use cache-only writes
+and browser subscriber notifications, without invoking the processor. Newly
+allowed cache-only records use the processor's force flag once to trigger
+discovery despite an unchanged cache record. All private DHCP access is isolated in:
 
 ```text
 custom_components/mikrotik_dhcp_sync/dhcp_bridge.py

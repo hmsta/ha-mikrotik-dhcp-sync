@@ -13,6 +13,7 @@ CONF_SKIP_EMPTY_HOSTNAMES = "skip_empty_hostnames"
 CONF_AUTHORITATIVE_SYNC = "authoritative_sync"
 CONF_HOSTNAME_FALLBACK_RULES = "hostname_fallback_rules"
 CONF_ESPHOME_HOSTNAME_FILTER = "esphome_hostname_filter"
+CONF_DISCOVERY_SUBNETS = "discovery_subnets"
 
 DEFAULT_PORT = 8728
 DEFAULT_SCAN_INTERVAL_SECONDS = 30

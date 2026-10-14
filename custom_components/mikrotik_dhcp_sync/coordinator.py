@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     CONF_AUTHORITATIVE_SYNC,
+    CONF_DISCOVERY_SUBNETS,
     CONF_ESPHOME_HOSTNAME_FILTER,
     CONF_HOST,
     CONF_HOSTNAME_FALLBACK_RULES,
@@ -29,6 +30,7 @@ from .const import (
     DOMAIN,
 )
 from .dhcp_bridge import async_forget_source, async_import_leases_to_dhcp_cache
+from .discovery_filter import parse_discovery_subnets
 from .esphome_discovery import ESPHomeDiscovery
 from .routeros import RouterOSClient, looks_like_auth_error
 
@@ -55,6 +57,11 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
         )
         self._unsub_poll: CALLBACK_TYPE | None = None
         self._closed = False
+        self._discovery_subnets = parse_discovery_subnets(
+            entry.options.get(
+                CONF_DISCOVERY_SUBNETS, entry.data.get(CONF_DISCOVERY_SUBNETS, "")
+            )
+        )
         self._skip_empty_hostnames = entry.options.get(
             CONF_SKIP_EMPTY_HOSTNAMES,
             entry.data.get(CONF_SKIP_EMPTY_HOSTNAMES, DEFAULT_SKIP_EMPTY_HOSTNAMES),
@@ -78,6 +85,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
                 CONF_ESPHOME_HOSTNAME_FILTER,
                 entry.data.get(CONF_ESPHOME_HOSTNAME_FILTER, ""),
             ),
+            discovery_subnets=self._discovery_subnets,
         )
 
     @staticmethod
@@ -138,6 +146,7 @@ class MikrotikDhcpSyncCoordinator(DataUpdateCoordinator[dict[str, dict[str, str]
             authoritative_sync=self._authoritative_sync,
             hostname_fallback_rules=self._hostname_fallback_rules,
             source_id=self.config_entry.entry_id,
+            discovery_subnets=self._discovery_subnets,
         )
         # Use this router's full snapshot, not HA's shared cache or only changes.
         # This also finds existing candidates when discovery is first enabled.

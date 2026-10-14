@@ -56,9 +56,42 @@ def test_option_round_trip_and_clear_overrides_setup_value(config_flow):
 
 
 def test_cleared_optional_text_omitted_by_ha_frontend_stays_empty(config_flow):
-    fields = (config_flow.CONF_ESPHOME_HOSTNAME_FILTER, config_flow.CONF_HOSTNAME_FALLBACK_RULES)
+    fields = (
+        config_flow.CONF_ESPHOME_HOSTNAME_FILTER, config_flow.CONF_HOSTNAME_FALLBACK_RULES,
+        config_flow.CONF_DISCOVERY_SUBNETS,
+    )
     schema = config_flow._options_schema({field: "previous value" for field in fields})
     # ha-form-string sends undefined when an optional text field is cleared;
     # JSON drops it, so the backend must not restore the old saved value.
     result = schema({})
     assert all(result[field] == "" for field in fields)
+
+
+@pytest.mark.parametrize("value", ["not-a-subnet", "192.168.10.0/33", "192.168.10.0/24, bad", ", ;", "192.168.10.5"])
+def test_invalid_subnets_rejected_in_setup_and_options(config_flow, value):
+    async def run():
+        field = config_flow.CONF_DISCOVERY_SUBNETS
+        for flow, method in [
+            (config_flow.ConfigFlow(), "async_step_user"),
+            (config_flow.OptionsFlowHandler(SimpleNamespace(data={}, options={})), "async_step_init"),
+        ]:
+            result = await getattr(flow, method)({field: value})
+            assert result["errors"] == {field: "invalid_discovery_subnets"}
+            assert "data" not in result
+    asyncio.run(run())
+
+
+def test_subnet_options_round_trip_and_clear(config_flow):
+    async def run():
+        field = config_flow.CONF_DISCOVERY_SUBNETS
+        entry = SimpleNamespace(data={field: "192.168.10.0/24"}, options={})
+        flow = config_flow.OptionsFlowHandler(entry)
+        form = await flow.async_step_init()
+        marker = next(key for key in form["data_schema"].schema if key == field)
+        assert marker.description["suggested_value"] == "192.168.10.0/24"
+        value = "192.168.30.0/24, fd00::/64"
+        assert (await flow.async_step_init({field: value}))["data"][field] == value
+        assert (await flow.async_step_init(form["data_schema"]({})))["data"][field] == ""
+        setup = config_flow._setup_schema()({"host": "router", "username": "user", "password": "secret"})
+        assert setup[field] == ""
+    asyncio.run(run())

@@ -170,3 +170,26 @@ def test_new_discovery_gets_full_snapshot_even_when_cache_unchanged(coordinator,
         instance._esphome_discovery.async_update_leases.assert_called_once_with([{"host-name": "sonoff"}])
         assert publish.call_args.kwargs["source_id"] == "router"
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("option", [None, "192.168.30.0/24", ""])
+def test_coordinator_shares_subnet_policy_with_both_discovery_paths(coordinator, monkeypatch, option):
+    from ipaddress import ip_network
+
+    async def run():
+        leases = [{"host-name": "sonoff", "active-address": "192.168.50.20"}]
+        hass = SimpleNamespace(data={}, async_add_executor_job=AsyncMock(return_value=leases))
+        entry = make_entry()
+        entry.data["discovery_subnets"] = "192.168.10.0/24"
+        if option is not None:
+            entry.options["discovery_subnets"] = option
+        expected = () if option == "" else (ip_network(option or "192.168.10.0/24"),)
+        instance = coordinator.MikrotikDhcpSyncCoordinator(hass, entry)
+        assert instance._esphome_discovery._discovery_subnets == expected
+        publish = Mock(return_value={})
+        monkeypatch.setattr(coordinator, "async_import_leases_to_dhcp_cache", publish)
+        instance._esphome_discovery.async_update_leases = Mock()
+        await instance._async_update_data()
+        assert publish.call_args.kwargs["discovery_subnets"] == expected
+        assert publish.call_args.args[1] == leases  # Browser still receives every lease.
+    asyncio.run(run())

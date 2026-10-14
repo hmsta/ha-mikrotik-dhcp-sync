@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_AUTHORITATIVE_SYNC,
+    CONF_DISCOVERY_SUBNETS,
     CONF_ESPHOME_HOSTNAME_FILTER,
     CONF_HOST,
     CONF_HOSTNAME_FALLBACK_RULES,
@@ -27,6 +28,7 @@ from .const import (
     MAX_SCAN_INTERVAL_SECONDS,
     MIN_SCAN_INTERVAL_SECONDS,
 )
+from .discovery_filter import parse_discovery_subnets
 from .routeros import RouterOSClient, looks_like_auth_error
 
 
@@ -63,6 +65,7 @@ def _setup_schema() -> vol.Schema:
                 default=DEFAULT_HOSTNAME_FALLBACK_RULES,
             ): str,
             vol.Optional(CONF_ESPHOME_HOSTNAME_FILTER, default=""): str,
+            vol.Optional(CONF_DISCOVERY_SUBNETS, default=""): str,
         }
     )
 
@@ -102,6 +105,11 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 default="",
                 description={"suggested_value": defaults.get(CONF_ESPHOME_HOSTNAME_FILTER, "")},
             ): str,
+            vol.Optional(
+                CONF_DISCOVERY_SUBNETS,
+                default="",
+                description={"suggested_value": defaults.get(CONF_DISCOVERY_SUBNETS, "")},
+            ): str,
         }
     )
 
@@ -126,6 +134,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
+            try:
+                parse_discovery_subnets(user_input.get(CONF_DISCOVERY_SUBNETS, ""))
+            except ValueError:
+                errors[CONF_DISCOVERY_SUBNETS] = "invalid_discovery_subnets"
+
+        if user_input is not None and not errors:
             await self.async_set_unique_id(
                 f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
             )
@@ -161,14 +175,22 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Manage options."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            try:
+                parse_discovery_subnets(user_input.get(CONF_DISCOVERY_SUBNETS, ""))
+            except ValueError:
+                errors[CONF_DISCOVERY_SUBNETS] = "invalid_discovery_subnets"
+            else:
+                return self.async_create_entry(title="", data=user_input)
 
         return self.async_show_form(
             step_id="init",
             data_schema=_options_schema(
                 dict(self._config_entry.data) | dict(self._config_entry.options)
+                | (user_input or {})
             ),
+            errors=errors,
         )
 
 

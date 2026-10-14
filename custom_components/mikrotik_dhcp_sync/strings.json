@@ -11,16 +11,19 @@
           "skip_empty_hostnames": "Skip leases without hostnames",
           "authoritative_sync": "Delete DHCP cache entries missing from MikroTik",
           "hostname_fallback_rules": "Hostname fallback rules",
-          "esphome_hostname_filter": "Potential ESPHome devices (hostname contains)"
+          "esphome_hostname_filter": "Potential ESPHome devices (hostname contains)",
+          "discovery_subnets": "Discovery subnets"
         },
         "data_description": {
-          "esphome_hostname_filter": "Optional: space- or comma-separated words, e.g. esp32 sonoff. Matches any word, ignoring case. Leave empty to disable probing."
+          "esphome_hostname_filter": "Optional: space- or comma-separated words, e.g. esp32 sonoff. Matches any word, ignoring case. Leave empty to disable probing.",
+          "discovery_subnets": "Optional: CIDRs separated by spaces or commas, e.g. 192.168.10.0/24, 192.168.30.0/24. Limits DHCP discovery and ESPHome probes from this router. Leave empty to allow all subnets. Excluded leases remain visible in the DHCP Browser."
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect",
-      "invalid_auth": "Invalid authentication"
+      "invalid_auth": "Invalid authentication",
+      "invalid_discovery_subnets": "Enter valid IPv4 or IPv6 CIDRs separated by spaces or commas, or leave empty to allow all subnets."
     }
   },
   "options": {
@@ -31,12 +34,17 @@
           "skip_empty_hostnames": "Skip leases without hostnames",
           "authoritative_sync": "Delete DHCP cache entries missing from MikroTik",
           "hostname_fallback_rules": "Hostname fallback rules",
-          "esphome_hostname_filter": "Potential ESPHome devices (hostname contains)"
+          "esphome_hostname_filter": "Potential ESPHome devices (hostname contains)",
+          "discovery_subnets": "Discovery subnets"
         },
         "data_description": {
-          "esphome_hostname_filter": "Optional: space- or comma-separated words, e.g. esp32 sonoff. Matches any word, ignoring case. Leave empty to disable probing."
+          "esphome_hostname_filter": "Optional: space- or comma-separated words, e.g. esp32 sonoff. Matches any word, ignoring case. Leave empty to disable probing.",
+          "discovery_subnets": "Optional: CIDRs separated by spaces or commas, e.g. 192.168.10.0/24, 192.168.30.0/24. Limits DHCP discovery and ESPHome probes from this router. Leave empty to allow all subnets. Excluded leases remain visible in the DHCP Browser."
         }
       }
+    },
+    "error": {
+      "invalid_discovery_subnets": "Enter valid IPv4 or IPv6 CIDRs separated by spaces or commas, or leave empty to allow all subnets."
     }
   }
 }

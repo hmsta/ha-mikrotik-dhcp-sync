@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import LEASE_HOSTNAME
 from .dhcp_bridge import normalize_active_lease
+from .discovery_filter import DiscoveryNetworks, discovery_allowed
 
 _LOGGER = logging.getLogger(__name__)
 _RUNTIME_KEY = "mikrotik_dhcp_sync_esphome_probes"
@@ -67,8 +68,12 @@ def _mac_key(value: str | None) -> str:
 class ESPHomeDiscovery:
     """Maintain a per-router candidate set independently of HA's DHCP cache."""
 
-    def __init__(self, hass: HomeAssistant, hostname_filter: str) -> None:
+    def __init__(
+        self, hass: HomeAssistant, hostname_filter: str,
+        *, discovery_subnets: DiscoveryNetworks = (),
+    ) -> None:
         self.hass = hass
+        self._discovery_subnets = discovery_subnets
         self._tokens = tuple(filter(None, re.split(r"[\s,;]+", hostname_filter.casefold())))
         self._states: dict[str, ProbeState] = {}
         self._task: asyncio.Task | None = None
@@ -92,6 +97,8 @@ class ESPHomeDiscovery:
             if normalized is None:
                 continue
             mac, host = normalized
+            if not discovery_allowed(host, self._discovery_subnets):
+                continue
             address = ip_address(host)
             if address.is_multicast or address.is_reserved:
                 continue
